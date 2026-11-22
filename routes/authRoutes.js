@@ -53,8 +53,8 @@ router.post('/register', async (req, res) => {
 
         await envoyerEmail(
             cleanEmail,
-            "⛏️ Validez votre compagnie sur Gold Mine",
-            `<h2>Bienvenue PDG ${username.trim()} !</h2><p>Voici votre code de validation à 6 chiffres pour activer votre mine :</p><h1 style="color:#d97706;">${codeValidation}</h1>`
+            "Code de validation de votre compte Gold Mine",
+            `<p>Bienvenue PDG <strong>${username.trim()}</strong>,</p><p>Voici votre code de validation à 6 chiffres pour activer votre compagnie minière :</p><p style="font-size: 26px; font-weight: bold; color: #fbbf24; letter-spacing: 4px;">${codeValidation}</p>`
         );
 
         res.json({ success: true, requireVerification: true, email: cleanEmail });
@@ -115,7 +115,6 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ error: "Veuillez valider votre e-mail avec le code reçu.", unverifiedEmail: user.email });
         }
 
-        // Vérifie si le joueur a déjà une mine V2, sinon on la initialise proprement
         const mineCheck = await pool.query('SELECT user_id FROM mines WHERE user_id = $1', [user.id]);
         if (mineCheck.rows.length === 0) {
             const cfg = getGameConfig();
@@ -151,8 +150,8 @@ router.post('/forgot-password', async (req, res) => {
 
         await envoyerEmail(
             cleanEmail,
-            "🔑 Récupération de mot de passe - Gold Mine",
-            `<p>Bonjour ${user.username}, voici votre code de réinitialisation :</p><h1 style="color:#d97706;">${code}</h1>`
+            "Reinitialisation de votre mot de passe Gold Mine",
+            `<p>Bonjour <strong>${user.username}</strong>,</p><p>Voici votre code de sécurité à 6 chiffres pour choisir un nouveau mot de passe :</p><p style="font-size: 26px; font-weight: bold; color: #fbbf24; letter-spacing: 4px;">${code}</p>`
         );
         res.json({ success: true, message: "Un code de secours à 6 chiffres vient d'être envoyé sur votre e-mail." });
     } catch (err) {

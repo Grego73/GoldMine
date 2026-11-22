@@ -1,34 +1,47 @@
 # 🗄️ MÉMOIRE 2/2 : BASE DE DONNÉES & SUIVI — GOLD MINE
 
-## 1. Les 6 Tables PostgreSQL (`config/db.js`)
+## 1. Les 9 Tables PostgreSQL (`config/db.js`)
 1. **`users`** :
-   - `id` (SERIAL PK), `username` (UNIQUE), `email` (UNIQUE), `password_hash`, `role` (`'player'` ou `'admin'`, le 1er inscrit reçoit `'admin'`), `is_banned`, `is_verified` (BOOLEAN), `verification_code` (VARCHAR), `reset_code`, `reset_expires`, `created_at`.
+   - `id` (SERIAL PK), `username` (UNIQUE), `email` (UNIQUE), `password_hash`, `role` (`'player'` ou `'admin'`, le 1er inscrit reçoit `'admin'`), `is_verified` (BOOLEAN), `verification_code`, `reset_code`, `is_banned`, `created_at`.
 2. **`mines`** :
-   - `user_id` (PK, FK `users.id`), `jour`, `argent`, `stock_or`, `cours_or`, `mineurs`, `moral`, `foreuses`, `usure`, `parcelle_active`, `parcelles_json` (JSONB des 12 secteurs A à L), `updated_at`.
-3. **`admin_logs`** :
+   - `user_id` (PK, FK `users.id`), `jour`, `argent`, `stock_or`, `mineurs`, `foreuses`, `moral`, `usure`, `cadence` (`0.8`, `1.0` ou `1.25`), `marketing_points`, `parcelle_active`, `parcelles` (JSONB des 12 secteurs A à L), `pending_event` (JSONB incident en attente), `updated_at`.
+3. **`market_state`** :
+   - `id` (PK = `1`), `cours_or` (cours mondial partagé), `historique_cours` (JSONB des 24 dernières cotations), `last_market_tick` (TIMESTAMP du dernier cycle 4h), `last_daily_tick` (DATE de la dernière clôture 3h00).
+4. **`clients_catalog`** :
+   - `id` (SERIAL PK), `nom` (UNIQUE), `type_client` (`'Particulier'`, `'Entreprise'`, `'Événementiel'`), `secteur`, `min_gr`, `max_gr`, `bonus_min`, `bonus_max`, `poids_apparition`, `actif` (BOOLEAN) — Catalogue extensible à l'infini depuis l'Admin.
+5. **`market_clients`** :
+   - `id` (SERIAL PK), `nom`, `type_client`, `secteur`, `demande_grammes`, `prix_base_gramme`, `marge_acceptee_max`, `expires_at` — Les acheteurs actifs générés toutes les `cycleMarcheHeures` (4h).
+6. **`game_settings`** :
+   - `key` (PK), `value` (NUMERIC), `label` (VARCHAR) — **25 paramètres modifiables depuis l'Admin** :
+     `argentDepart`, `coursOrInitial`, `coursOrMin`, `coursOrMax`, `coutMineur`, `salaireMineurJour`, `prodMineurTonnes`, `coutForeuse`, `carburantForeuseJour`, `prodForeuseTonnes`, `usureParForeuse`, `coutRevision`, `coutPanneForcee`, `coutPrime`, `coutCarottage`, `coutDemenagement`, `taxeMiniere`, `chanceEvenement`, `heureClotureJour` (`3`), `cycleMarcheHeures` (`4`), `nbClientsMarche` (`10`), `margeNegociationMax` (`0.15`), `coutUniteMarketing`, `usureMarketingJour`, `seuilEtudeMarche` (`25`).
+7. **`site_texts`** :
+   - `key` (PK), `title`, `content` — Textes éditables depuis l'Admin (contient `'welcome'` affiché sur `index.html`).
+8. **`admin_logs`** :
    - `id` (SERIAL PK), `admin_username`, `action`, `created_at`.
-4. **`game_settings`** :
-   - `key` (PK), `value` (NUMERIC), `label` (VARCHAR) — **18 paramètres modifiables depuis l'Admin** (`argentDepart`, `coursOrInitial`, `coursOrMin`, `coursOrMax`, `taxeMiniere`, `coutMineur`, `coutForeuse`, `coutRevision`, `coutPrime`, `coutCarottage`, `coutDemenagement`, `coutPanneForcee`, `salaireMineurJour`, `carburantForeuseJour`, `prodMineurTonnes`, `prodForeuseTonnes`, `usureParForeuse`, `chanceEvenement`).
-5. **`site_texts`** :
-   - `key` (PK), `title` (VARCHAR), `content` (TEXT) — Textes éditables depuis l'Admin (contient `'welcome_intro'` affiché sur `index.html`).
-6. **`player_logs`** :
-   - `id` (SERIAL PK), `user_id` (FK `users.id`), `username`, `category` (`'AUTH'`, `'FINANCE'`, `'MINE'`, `'PROSPECTION'`), `details` (TEXT), `created_at` — Journal complet des actions des joueurs consultable et filtrable dans `admin.html`.
+9. **`player_logs`** :
+   - `id` (SERIAL PK), `user_id` (FK `users.id`), `username`, `category` (`'AUTH'`, `'CLOTURE'`, `'FINANCE'`, `'MINE'`, `'MARKETING'`, `'PROSPECTION'`), `details`, `created_at`.
 
 ---
 
-## 2. Règles de Gameplay Actuelles
-- **Extraction :** `(Mineurs * prodMineurTonnes * Cadence * Moral%) + (Excavatrices * prodForeuseTonnes * Cadence)`.
-- **Stockage & Bourse :** L'or extrait est stocké en grammes (`stockOr`). La revente s'effectue manuellement au cours du jour (borné entre `coursOrMin` et `coursOrMax`) avec prélèvement de `taxeMiniere` (20 % par défaut).
-- **Prospection (12 concessions) :** Carottage géologique (marge d'erreur ±25 %) puis déménagement des excavatrices.
-- **Usure & Moral :** Cadence *Intensif* accélère la production mais dégrade le moral (< 25 % = grève) et augmente le risque de panne mécanique.
+## 2. Règles de Gameplay Temps Réel (V2)
+- **Clôture quotidienne automatique (`heureClotureJour` = 3h00 Paris) :**
+  - Exécutée automatiquement par `utils/gameEngine.js` (avec rattrapage immédiat si le serveur Render sort de veille).
+  - Calcule l'extraction selon les effectifs, les excavatrices, le moral (< 25 % = grève) et la cadence choisie par le PDG, déduit les frais fixes, applique l'usure mécanique et la baisse quotidienne de notoriété marketing (`usureMarketingJour`), et tire éventuellement un événement aléatoire.
+- **Marché Mondial & Clients (`cycleMarcheHeures` = 4h) :**
+  - Génère `nbClientsMarche` (`10`) acheteurs pondérés depuis `clients_catalog` (*Particulier*, *Entreprise*, *Événementiel*).
+  - Le cours mondial fluctue à chaque cycle de 4h et baisse légèrement lors des ventes massives des PDG (offre/demande).
+- **Négociation & Compétition Marketing :**
+  - Le PDG propose une quantité d'or à un client avec une marge de `-15 %` à `+15 %` (`margeNegociationMax`).
+  - La probabilité d'acceptation dépend du prix demandé et de la notoriété marketing du PDG comparée à la moyenne des autres entreprises actives.
+  - À partir de `seuilEtudeMarche` (`25 pts`), l'étude de marché dévoile la tolérance de prix exacte de chaque client.
 
 ---
 
 ## 3. Feuille de route / État d'avancement
-- [x] **Édition des textes (`site_texts`) dans l'Admin :** Implémenté dans `routes/adminRoutes.js`, `public/admin.html` et `public/js/admin.js`.
-- [x] **Passerelle Aide & Communauté (TchatGC) :** Bouton intégré dans `index.html` et `game.html` via `/api/links`.
-- [x] **Envoi d'e-mails réels (Brevo) :** Implémenté dans `utils/mailer.js` pour la validation d'inscription et le mot de passe perdu.
-- [x] **Suivi complet de l'activité des joueurs (`player_logs`) :** Table SQL, `utils/logger.js` et tableau filtrable dans `admin.html`.
-- [ ] **Finalisation mise en ligne v1.0.0 :** Ajouter `?v=1.0.0` dans les 3 pages HTML (`index.html`, `game.html`, `admin.html`), vider les tables sur Neon (`DROP TABLE...`) et exécuter `git push` vers Render.
-- [ ] **Module Banques & Emprunts (`routes/bankRoutes.js`) :** Prêts bancaires avec intérêts quotidiens pour financer l'expansion.
-- [ ] **Module R&D / Technologies :** Amélioration des excavatrices, du raffinage et des sondages géologiques.
+- [x] **Architecture 100 % autonome (sans CDN externe) :** Design compact `style.css`, modales natives, graphiques `<canvas>` natifs et favicon mine à ciel ouvert.
+- [x] **Moteur temps réel (Clôture 3h00 + Marché 4h) :** Implémenté dans `utils/gameEngine.js` avec rattrapage automatique post-veille.
+- [x] **Système Clients & Marketing compétitif :** Table `clients_catalog` (Particulier / Entreprise / Événementiel) éditable en Admin + négociation `-15% / +15%` + étude de marché.
+- [x] **Deploiement V2 (`v1.0.6`) sur Neon & Render :** Opérationnel en production.
+- [ ] **Activation des e-mails réels (Brevo) :** Renseigner `BREVO_API_KEY` et `BREVO_SENDER_EMAIL` dans les variables d'environnement Render.
+- [ ] **Module Banques & Emprunts (`routes/bankRoutes.js`) :** Prêts bancaires avec intérêts prélevés lors de la clôture quotidienne de 3h00.
+- [ ] **Module R&D / Technologies :** Améliorations permanentes (foreuses haute capacité, raffinage amélioré, géologie avancée).
