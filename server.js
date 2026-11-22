@@ -33,6 +33,21 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/game', gameRoutes);
 
+const LINKS = require('./config/links');
+
+// Route légère pour le monitoring UptimeRobot (anti-veille Render)
+app.get('/ping', (req, res) => {
+    res.status(200).send('OK - Gold Mine');
+});
+
+// Expose les liens publics au front-end (ex: passerelle vers TchatGC)
+app.get('/api/links', (req, res) => {
+    res.json({
+        appUrl: LINKS.appUrl,
+        tchatgcUrl: LINKS.tchatgcUrl
+    });
+});
+
 // Démarrage du serveur après vérification des tables et chargement de la config
 initDatabase()
     .then(() => loadGameConfig())

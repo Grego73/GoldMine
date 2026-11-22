@@ -10,10 +10,13 @@
 
 ---
 
-## 2. Variables d'environnement (`.env`)
-- `PORT=3000` : Port d'écoute du serveur local.
+## 2. Variables d'environnement (`.env` / Render)
+- `PORT=3000` : Port d'écoute local.
 - `DATABASE_URL` : Chaîne de connexion PostgreSQL Neon (`postgresql://...sslmode=require&channel_binding=require`).
-- `SESSION_SECRET` : Clé secrète pour les cookies de session Express (durée 30 jours).
+- `SESSION_SECRET` : Clé secrète pour les cookies de session Express (30 jours).
+- `APP_URL` : URL de production Render de Gold Mine (lue par `config/links.js`).
+- `TCHATGC_URL` : URL de la plateforme communautaire TchatGC pour la passerelle Aide/Tchat (lue par `config/links.js`).
+- `NODE_ENV=production` : Active les cookies sécurisés HTTPS sur Render.
 
 ---
 
@@ -27,7 +30,8 @@ Gold Mine/
 │
 ├── config/
 │   ├── db.js                   # Connexion PostgreSQL (Pool) + création automatique des 4 tables SQL & index
-│   └── gameConfig.js           # Cache en mémoire de la table `game_settings` + génération des 12 concessions
+│   ├── gameConfig.js           # Cache en mémoire de la table `game_settings` + génération des 12 concessions
+│   └── links.js                # Centralisation unique de toutes les URLs internes et externes (`APP_URL`, `TCHATGC_URL`, `brevoApiUrl`)
 │
 ├── utils/
 │   └── authMiddleware.js       # Middlewares de sécurité `requireAuth` (joueur connecté) et `requireAdmin` (rôle admin)
@@ -63,6 +67,7 @@ Gold Mine/
 1. **Éviter les crochets `[]` contenant des chiffres en JS :** Toujours utiliser `new Array(...)` et `.at(0)` (ex. `result.rows.at(0)`, `datasets.at(0)`) pour éviter toute altération de syntaxe lors des échanges de code.
 2. **Séparation stricte :** Ne pas mélanger le HTML, le CSS et le JS dans un même fichier. Chaque nouveau module métier doit avoir sa route dans `routes/` et son script dans `public/js/`.
 3. **Équilibrage dynamique :** Toujours lire les coûts et rendements depuis `CONFIG` (`game_settings` en base) plutôt que de les écrire en dur.
+4. **Centralisation des liens (`config/links.js`) :** Ne jamais mettre d'URLs en dur dans les routes, les utilitaires ou le front-end — toujours passer par `LINKS` (`config/links.js`) ou `/api/links`.
 
 ---
 
