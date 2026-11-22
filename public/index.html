@@ -2,72 +2,65 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gold Mine - Simulation & Gestion Minière à Ciel Ouvert</title>
     <link rel="stylesheet" href="https://jsdelivr.net">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- Barre supérieure -->
-    <nav class="ui inverted menu mine-nav">
-        <div class="ui container">
-            <a class="header item" style="color: #fbbf24; font-size: 1.2em;">
-                <i class="mountain icon"></i> GOLD MINE
+    <div class="ui inverted menu mine-nav">
+        <div class="header item">
+            <i class="gem yellow icon"></i> GOLD MINE
+        </div>
+        <div class="right menu">
+            <a id="link-tchatgc" href="#" target="_blank" class="item">
+                <i class="comments icon"></i> Communauté TchatGC
             </a>
-            <div class="right menu">
-                <a class="item" id="link-tchatgc" href="#" target="_blank" style="color: #d6d3d1;">
-                    <i class="comments icon yellow"></i> Communauté TchatGC
-                </a>
+            <div class="item">
+                <span class="ui yellow mini label app-version">v1.0.0</span>
             </div>
         </div>
-    </nav>
+    </div>
 
     <div class="ui container" style="margin-top: 40px;">
-        <div class="ui stackable two column grid middle aligned">
+        <div class="ui stackable two column grid">
             
-            <!-- COLONNE GAUCHE : PRÉSENTATION DU JEU (Éditable depuis l'Admin) -->
-            <div class="nine wide column">
-                <div class="ui segment mine-card" style="padding: 30px;">
-                    <h1 class="ui header" style="color: #fbbf24; font-size: 2.2em;">
-                        <i class="gem outline icon"></i>
-                        <div class="content" id="welcome-title">
-                            Bienvenue dans Gold Mine
-                        </div>
-                    </h1>
-
-                    <p id="welcome-content" style="font-size: 1.15em; line-height: 1.6; color: #e7e5e4; margin: 20px 0;">
+            <!-- Colonne Gauche : Présentation du jeu -->
+            <div class="ten wide column">
+                <div class="ui segment mine-card">
+                    <h1 id="welcome-title" class="ui dividing header mine-header">Bienvenue dans Gold Mine</h1>
+                    <p id="welcome-content" style="font-size: 1.1em; line-height: 1.6; color: #d6d3d1;">
                         Chargement de la présentation...
                     </p>
 
-                    <div class="ui divider" style="border-color: #44403c;"></div>
-
-                    <div class="ui three column grid center aligned" style="margin-top: 15px;">
+                    <div class="ui three column stackable grid" style="margin-top: 25px;">
                         <div class="column">
-                            <i class="map marked alternate big yellow icon"></i>
-                            <h4 style="color: #fbbf24; margin: 8px 0 4px;">Prospection</h4>
-                            <p style="font-size: 0.85em; color: #a8a29e;">Sondez 12 secteurs et découvrez des filons riches.</p>
+                            <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
+                                <h4 class="ui yellow header"><i class="compass icon"></i> Prospection</h4>
+                                <p style="color: #a8a29e; font-size: 0.9em;">Sondez 12 secteurs et découvrez des filons riches.</p>
+                            </div>
                         </div>
                         <div class="column">
-                            <i class="truck big orange icon"></i>
-                            <h4 style="color: #fbbf24; margin: 8px 0 4px;">Flotte & Équipes</h4>
-                            <p style="font-size: 0.85em; color: #a8a29e;">Gérez excavatrices, maintenance et moral ouvrier.</p>
+                            <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
+                                <h4 class="ui yellow header"><i class="truck icon"></i> Flotte & Équipes</h4>
+                                <p style="color: #a8a29e; font-size: 0.9em;">Gérez excavatrices, maintenance et moral ouvrier.</p>
+                            </div>
                         </div>
                         <div class="column">
-                            <i class="chart line big green icon"></i>
-                            <h4 style="color: #fbbf24; margin: 8px 0 4px;">Bourse de l'Or</h4>
-                            <p style="font-size: 0.85em; color: #a8a29e;">Stockez vos lingots et vendez au meilleur cours.</p>
+                            <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
+                                <h4 class="ui yellow header"><i class="chart line icon"></i> Bourse de l'Or</h4>
+                                <p style="color: #a8a29e; font-size: 0.9em;">Stockez vos lingots et vendez au meilleur cours.</p>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- COLONNE DROITE : CONNEXION / INSCRIPTION / VALIDATION -->
-            <div class="seven wide column">
-                <div class="ui segment mine-card" style="padding: 25px;">
-                    <h2 class="ui center aligned header" style="color: #fbbf24;">
-                        <i class="user tie icon"></i> Espace PDG
-                    </h2>
+            <!-- Colonne Droite : Espace PDG -->
+            <div class="six wide column">
+                <div class="ui segment mine-card">
+                    <h2 class="ui dividing header mine-header"><i class="user tie icon"></i> Espace PDG</h2>
 
                     <div id="auth-message" class="ui message" style="display: none;"></div>
 
@@ -75,73 +68,94 @@
                     <form id="form-login" class="ui inverted form">
                         <div class="field">
                             <label>Identifiant PDG</label>
-                            <div class="ui left icon input">
-                                <i class="user icon"></i>
-                                <input type="text" id="login-user" placeholder="Votre pseudo" required>
-                            </div>
+                            <input type="text" id="login-user" placeholder="Votre pseudo" required>
                         </div>
                         <div class="field">
                             <label>Mot de passe</label>
-                            <div class="ui left icon input">
-                                <i class="lock icon"></i>
-                                <input type="password" id="login-pass" placeholder="••••••••" required>
-                            </div>
+                            <input type="password" id="login-pass" placeholder="Votre mot de passe" required>
                         </div>
-                        <button class="ui yellow fluid large button" type="submit">
+                        <button type="submit" class="ui fluid yellow button">
                             <i class="sign in alternate icon"></i> Accéder à ma mine
                         </button>
-                        <div style="margin-top: 18px; display: flex; justify-content: space-between; font-size: 0.95em;">
-                            <a href="#" onclick="afficherBloc('register')" style="color: #fbbf24; font-weight: bold;">Créer une compagnie</a>
-                            <a href="#" onclick="afficherBloc('forgot')" style="color: #a8a29e;">Mot de passe perdu ?</a>
+                        <div style="margin-top: 15px; display: flex; justify-content: space-between; font-size: 0.9em;">
+                            <a href="#" onclick="afficherBloc('register'); return false;" style="color: #fbbf24;">Créer une compagnie</a>
+                            <a href="#" onclick="afficherBloc('forgot'); return false;" style="color: #a8a29e;">Mot de passe perdu ?</a>
                         </div>
                     </form>
 
                     <!-- 2. INSCRIPTION -->
                     <form id="form-register" class="ui inverted form" style="display: none;">
-                        <div class="field"><label>Nom du PDG (Pseudo)</label><input type="text" id="reg-user" placeholder="Ex: Grego73" required></div>
-                        <div class="field"><label>Adresse E-mail (validation requise)</label><input type="email" id="reg-email" placeholder="votre@email.com" required></div>
-                        <div class="field"><label>Mot de passe (6 caractères min.)</label><input type="password" id="reg-pass" placeholder="••••••••" required></div>
-                        <button class="ui green fluid large button" type="submit">
+                        <div class="field">
+                            <label>Nom du PDG (Pseudo)</label>
+                            <input type="text" id="reg-user" placeholder="Ex: GoldDigger73" required>
+                        </div>
+                        <div class="field">
+                            <label>Adresse E-mail (validation requise)</label>
+                            <input type="email" id="reg-email" placeholder="pdg@exemple.fr" required>
+                        </div>
+                        <div class="field">
+                            <label>Mot de passe (6 caractères min.)</label>
+                            <input type="password" id="reg-pass" placeholder="••••••" required>
+                        </div>
+                        <button type="submit" class="ui fluid green button">
                             <i class="plus circle icon"></i> Fonder ma compagnie
                         </button>
-                        <div style="margin-top: 15px; text-align: center;">
-                            <a href="#" onclick="afficherBloc('login')" style="color: #fbbf24;">Déjà inscrit ? Se connecter</a>
+                        <div style="margin-top: 15px; text-align: center; font-size: 0.9em;">
+                            <a href="#" onclick="afficherBloc('login'); return false;" style="color: #fbbf24;">Déjà inscrit ? Se connecter</a>
                         </div>
                     </form>
 
-                    <!-- 3. VALIDATION E-MAIL PAR CODE -->
+                    <!-- 3. VALIDATION E-MAIL -->
                     <form id="form-verify" class="ui inverted form" style="display: none;">
-                        <p style="color: #d6d3d1;">Un code de confirmation à 6 chiffres a été envoyé à <strong id="verify-email-display" style="color: #fbbf24;"></strong>.</p>
+                        <p style="color: #d6d3d1;">
+                            Un code de confirmation à 6 chiffres a été envoyé à <strong id="verify-email-display" style="color: #fbbf24;"></strong>.
+                        </p>
                         <div class="field">
                             <label>Code de validation</label>
                             <input type="text" id="verify-code" placeholder="123456" maxlength="6" required>
                         </div>
-                        <button class="ui green fluid large button" type="submit">
-                            <i class="check circle icon"></i> Valider mon compte
+                        <button type="submit" class="ui fluid yellow button">
+                            <i class="check icon"></i> Valider mon compte
                         </button>
                     </form>
 
                     <!-- 4. MOT DE PASSE PERDU -->
                     <form id="form-forgot" class="ui inverted form" style="display: none;">
-                        <div class="field"><label>Votre E-mail d'inscription</label><input type="email" id="forgot-email" required></div>
-                        <button class="ui orange fluid button" type="submit">Recevoir un code de secours</button>
-                        <div id="reset-step2" style="display: none; margin-top: 15px; border-top: 1px solid #44403c; padding-top: 15px;">
-                            <div class="field"><label>Code à 6 chiffres</label><input type="text" id="reset-code"></div>
-                            <div class="field"><label>Nouveau mot de passe</label><input type="password" id="reset-newpass"></div>
-                            <button class="ui green fluid button" type="button" onclick="validerNouveauMdp()">Valider le nouveau mot de passe</button>
+                        <div class="field">
+                            <label>Votre E-mail d'inscription</label>
+                            <input type="email" id="forgot-email" placeholder="pdg@exemple.fr" required>
                         </div>
-                        <div style="margin-top: 15px; text-align: center;">
-                            <a href="#" onclick="afficherBloc('login')" style="color: #a8a29e;">Retour à la connexion</a>
+                        <button type="submit" class="ui fluid orange button">
+                            <i class="envelope icon"></i> Recevoir un code de secours
+                        </button>
+
+                        <div id="reset-step2" style="display: none; margin-top: 20px; padding-top: 15px; border-top: 1px solid #44403c;">
+                            <div class="field">
+                                <label>Code à 6 chiffres</label>
+                                <input type="text" id="reset-code" placeholder="123456" maxlength="6">
+                            </div>
+                            <div class="field">
+                                <label>Nouveau mot de passe</label>
+                                <input type="password" id="reset-newpass" placeholder="6 caractères min.">
+                            </div>
+                            <button type="button" onclick="validerNouveauMdp()" class="ui fluid green button">
+                                <i class="key icon"></i> Valider le nouveau mot de passe
+                            </button>
+                        </div>
+
+                        <div style="margin-top: 15px; text-align: center; font-size: 0.9em;">
+                            <a href="#" onclick="afficherBloc('login'); return false;" style="color: #a8a29e;">Retour à la connexion</a>
                         </div>
                     </form>
-
                 </div>
             </div>
 
         </div>
     </div>
 
+    <script src="https://jsdelivr.net"></script>
+    <script src="https://jsdelivr.net"></script>
+    <script src="js/version.js"></script>
     <script src="js/auth.js"></script>
 </body>
 </html>
-
