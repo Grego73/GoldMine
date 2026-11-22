@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gold Mine - Portail PDG</title>
+    <link rel="stylesheet" href="https://jsdelivr.net">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="auth-wrapper">
+
+    <div class="ui container" style="max-width: 450px;">
+        <div class="ui segment mine-card">
+            <h2 class="ui center aligned header" style="color: #fbbf24;">
+                <i class="mountain icon"></i> GOLD MINE
+                <div class="sub header" style="color: #a8a29e;">Simulation Minière à Ciel Ouvert</div>
+            </h2>
+
+            <div id="auth-message" class="ui message" style="display: none;"></div>
+
+            <!-- 1. FORMULAIRE CONNEXION -->
+            <form id="form-login" class="ui inverted form">
+                <div class="field">
+                    <label>Identifiant PDG</label>
+                    <input type="text" id="login-user" placeholder="Votre pseudo" required>
+                </div>
+                <div class="field">
+                    <label>Mot de passe</label>
+                    <input type="password" id="login-pass" placeholder="••••••••" required>
+                </div>
+                <button class="ui yellow fluid button" type="submit">
+                    <i class="sign in alternate icon"></i> Accéder à ma mine
+                </button>
+                <div style="margin-top: 15px; display: flex; justify-content: space-between; font-size: 0.9em;">
+                    <a href="#" onclick="afficherBloc('register')" style="color: #fbbf24;">Créer une compagnie</a>
+                    <a href="#" onclick="afficherBloc('forgot')" style="color: #a8a29e;">Mot de passe perdu ?</a>
+                </div>
+            </form>
+
+            <!-- 2. FORMULAIRE INSCRIPTION -->
+            <form id="form-register" class="ui inverted form" style="display: none;">
+                <div class="field">
+                    <label>Nom du PDG (Pseudo)</label>
+                    <input type="text" id="reg-user" placeholder="Ex: Grego73" required>
+                </div>
+                <div class="field">
+                    <label>Adresse E-mail</label>
+                    <input type="email" id="reg-email" placeholder="votre@email.com" required>
+                </div>
+                <div class="field">
+                    <label>Mot de passe (6 caractères min.)</label>
+                    <input type="password" id="reg-pass" placeholder="••••••••" required>
+                </div>
+                <button class="ui green fluid button" type="submit">
+                    <i class="plus circle icon"></i> Fonder ma compagnie
+                </button>
+                <div style="margin-top: 15px; text-align: center; font-size: 0.9em;">
+                    <a href="#" onclick="afficherBloc('login')" style="color: #fbbf24;">Déjà inscrit ? Se connecter</a>
+                </div>
+            </form>
+
+            <!-- 3. FORMULAIRE MOT DE PASSE PERDU -->
+            <form id="form-forgot" class="ui inverted form" style="display: none;">
+                <div class="field">
+                    <label>Votre E-mail d'inscription</label>
+                    <input type="email" id="forgot-email" placeholder="votre@email.com" required>
+                </div>
+                <button class="ui orange fluid button" type="submit">
+                    <i class="key icon"></i> Recevoir un code de secours
+                </button>
+
+                <div id="reset-step2" style="display: none; margin-top: 15px; border-top: 1px solid #44403c; padding-top: 15px;">
+                    <div class="field">
+                        <label>Code à 6 chiffres</label>
+                        <input type="text" id="reset-code" placeholder="123456">
+                    </div>
+                    <div class="field">
+                        <label>Nouveau mot de passe</label>
+                        <input type="password" id="reset-newpass" placeholder="••••••••">
+                    </div>
+                    <button class="ui green fluid button" type="button" onclick="validerNouveauMdp()">
+                        Valider le nouveau mot de passe
+                    </button>
+                </div>
+
+                <div style="margin-top: 15px; text-align: center; font-size: 0.9em;">
+                    <a href="#" onclick="afficherBloc('login')" style="color: #a8a29e;">Retour à la connexion</a>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/auth.js"></script>
+</body>
+</html>

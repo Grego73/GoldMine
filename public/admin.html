@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gold Mine - Administration</title>
+    <link rel="stylesheet" href="https://jsdelivr.net">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+    <nav class="ui inverted menu mine-nav">
+        <div class="ui container">
+            <a class="header item" style="color: #fbbf24;">
+                <i class="shield alternate icon"></i> PANEL ADMIN — GOLD MINE
+            </a>
+            <div class="right menu">
+                <a class="item" href="/game.html"><i class="arrow left icon"></i> Retour à ma mine</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="ui container" style="margin-top: 25px;">
+        
+        <div id="admin-alert" class="ui message" style="display: none;"></div>
+
+        <!-- 1. GESTION DES JOUEURS -->
+        <section class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header"><i class="users icon"></i> Compagnies & Joueurs inscrits</h3>
+            <div style="overflow-x: auto;">
+                <table class="ui inverted celled table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>PDG</th>
+                            <th>E-mail</th>
+                            <th>Rôle</th>
+                            <th>Jour</th>
+                            <th>Trésorerie</th>
+                            <th>Stock Or</th>
+                            <th>Engins</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-users-list"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 2. PARAMÈTRES D'ÉQUILIBRAGE EN BASE DE DONNÉES -->
+        <section class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header"><i class="sliders horizontal icon"></i> Équilibrage du Jeu (Base PostgreSQL)</h3>
+            <p style="color: #a8a29e; font-size: 0.9em;">Toute modification enregistrée ici s'applique immédiatement à l'ensemble du serveur.</p>
+            <div class="ui three column stackable grid" id="admin-settings-grid"></div>
+        </section>
+
+        <!-- 3. JOURNAUX D'ADMINISTRATION -->
+        <section class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header"><i class="history icon"></i> Dernières actions d'administration</h3>
+            <div id="admin-logs-list" style="font-family: monospace; font-size: 0.9em; color: #d6d3d1;"></div>
+        </section>
+
+    </div>
+
+    <script src="js/admin.js"></script>
+</body>
+</html>
