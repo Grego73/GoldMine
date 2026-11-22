@@ -1,10 +1,9 @@
 const express = require('express');
 const session = require('express-session');
-const pgSession = require('connect-pg-simple')(session);
 const path = require('path');
 require('dotenv').config();
 
-const { pool, initDB } = require('./config/db');
+const { initDB } = require('./config/db');
 const { loadGameConfig } = require('./config/gameConfig');
 const { APP_VERSION } = require('./config/version');
 const { synchroniserHorlogeServeur } = require('./utils/gameEngine');
@@ -21,7 +20,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
-    store: new pgSession({ pool, createTableIfMissing: true }),
     secret: process.env.SESSION_SECRET || 'goldmine_secret_key_2026',
     resave: false,
     saveUninitialized: false,
