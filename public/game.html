@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gold Mine - Exploitation à Ciel Ouvert</title>
-    <link rel="stylesheet" href="https://jsdelivr.net">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -220,18 +219,17 @@
 
     </div>
 
-    <!-- FENÊTRE MODALE ÉVÉNEMENTS ALÉATOIRES -->
-    <div id="eventModal" class="ui inverted modal">
-        <div id="eventTitle" class="header" style="color: #fbbf24;">Incident</div>
-        <div class="content">
-            <p id="eventDesc" style="font-size: 1.1em;">Description...</p>
+    <!-- FENÊTRE MODALE AUTONOME ÉVÉNEMENTS ALÉATOIRES -->
+    <div id="eventModal" class="modal-overlay">
+        <div class="modal-box">
+            <div id="eventTitle" class="modal-header">Incident</div>
+            <div class="modal-content">
+                <p id="eventDesc">Description...</p>
+            </div>
+            <div id="eventChoices" class="modal-actions"></div>
         </div>
-        <div id="eventChoices" class="actions"></div>
     </div>
-
-    <script src="https://jsdelivr.net"></script>
-    <script src="https://jsdelivr.net"></script>
-    <script src="https://jsdelivr.net"></script>
+    <script src="js/chart.umd.min.js"></script>
     <script src="js/version.js"></script>
     <script src="js/game.js"></script>
 </body>

@@ -2,38 +2,86 @@ let CONFIG = {};
 let etat = {};
 let parcelles = new Array();
 
-// 1. INITIALISATION DES GRAPHIQUES (Chart.js)
-const chartPatrimoine = new Chart(document.getElementById('chartPatrimoine').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: new Array(),
-        datasets: new Array({
-            label: 'Trésorerie (€)',
-            data: new Array(),
-            borderColor: '#34d399',
-            backgroundColor: 'rgba(52, 211, 153, 0.15)',
-            fill: true,
-            tension: 0.3
-        })
-    },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a8a29e' } }, y: { ticks: { color: '#a8a29e' } } } }
-});
+// 1. MOTEUR GRAPHIQUE 100 % NATIF (SANS CHART.JS)
+function creerGraphiqueMaison(canvasId, couleurLigne, couleurFond) {
+    const canvas = document.getElementById(canvasId);
+    const graph = {
+        labels: [],
+        values: [],
+        update() {
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const w = canvas.width = canvas.parentElement.clientWidth - 40;
+            const h = canvas.height = 180;
+            ctx.clearRect(0, 0, w, h);
 
-const chartCoursOr = new Chart(document.getElementById('chartCoursOr').getContext('2d'), {
-    type: 'line',
-    data: {
-        labels: new Array(),
-        datasets: new Array({
-            label: 'Cours Au (€/g)',
-            data: new Array(),
-            borderColor: '#fbbf24',
-            backgroundColor: 'rgba(251, 191, 36, 0.15)',
-            fill: true,
-            tension: 0.3
-        })
-    },
-    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a8a29e' } }, y: { ticks: { color: '#a8a29e' } } } }
-});
+            if (this.values.length === 0) return;
+
+            const pad = 35;
+            const min = Math.min(...this.values) * 0.95;
+            const max = Math.max(...this.values) * 1.05 || 1;
+            const range = max - min || 1;
+
+            // Grille horizontale
+            ctx.strokeStyle = '#44403c';
+            ctx.lineWidth = 1;
+            ctx.fillStyle = '#a8a29e';
+            ctx.font = '11px sans-serif';
+            for (let i = 0; i <= 3; i++) {
+                const y = pad + (i / 3) * (h - pad * 2);
+                const val = max - (i / 3) * range;
+                ctx.beginPath();
+                ctx.moveTo(pad, y);
+                ctx.lineTo(w - 10, y);
+                ctx.stroke();
+                ctx.fillText(Math.round(val).toLocaleString(), 2, y + 4);
+            }
+
+            // Points de la courbe
+            const stepX = this.values.length > 1 ? (w - pad - 15) / (this.values.length - 1) : 0;
+            const pts = this.values.map((v, i) => ({
+                x: pad + i * stepX,
+                y: pad + (1 - (v - min) / range) * (h - pad * 2)
+            }));
+
+            // Zone remplie sous la courbe
+            if (pts.length > 1) {
+                ctx.beginPath();
+                ctx.moveTo(pts[0].x, h - pad);
+                pts.forEach(p => ctx.lineTo(p.x, p.y));
+                ctx.lineTo(pts[pts.length - 1].x, h - pad);
+                ctx.closePath();
+                ctx.fillStyle = couleurFond;
+                ctx.fill();
+            }
+
+            // Ligne principale + points
+            ctx.beginPath();
+            pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+            ctx.strokeStyle = couleurLigne;
+            ctx.lineWidth = 2.5;
+            ctx.stroke();
+
+            pts.forEach((p, i) => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = couleurLigne;
+                ctx.fill();
+                if (i === 0 || i === pts.length - 1 || pts.length <= 8) {
+                    ctx.fillStyle = '#a8a29e';
+                    ctx.fillText(this.labels[i], p.x - 10, h - 10);
+                }
+            });
+        }
+    };
+    return {
+        data: { labels: graph.labels, datasets: [{ data: graph.values }] },
+        update: () => graph.update()
+    };
+}
+
+const chartPatrimoine = creerGraphiqueMaison('chartPatrimoine', '#34d399', 'rgba(52, 211, 153, 0.15)');
+const chartCoursOr = creerGraphiqueMaison('chartCoursOr', '#fbbf24', 'rgba(251, 191, 36, 0.15)');
 
 // 2. CATALOGUE DES ÉVÉNEMENTS ALÉATOIRES
 const EVENEMENTS = new Array(
@@ -77,7 +125,7 @@ async function initialiserJeu() {
 
         document.getElementById('stat-username').innerText = data.user.username;
         if (data.user.role === 'admin') {
-            document.getElementById('btn-admin-link').style.display = 'flex';
+            document.getElementById('btn-admin-link').style.display = 'inline-flex';
         }
 
         // Lien passerelle TchatGC
@@ -98,13 +146,15 @@ async function initialiserJeu() {
         document.getElementById('desc-taxe').innerText = `Vendez vos lingots au meilleur cours (Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%).`;
 
         // Point initial sur les courbes
-        chartPatrimoine.data.labels.push('J' + etat.jour);
-        chartPatrimoine.data.datasets.at(0).data.push(Math.round(etat.argent));
-        chartPatrimoine.update();
+        if (chartPatrimoine && chartCoursOr) {
+            chartPatrimoine.data.labels.push('J' + etat.jour);
+            chartPatrimoine.data.datasets.at(0).data.push(Math.round(etat.argent));
+            chartPatrimoine.update();
 
-        chartCoursOr.data.labels.push('J' + etat.jour);
-        chartCoursOr.data.datasets.at(0).data.push(etat.coursOr.toFixed(2));
-        chartCoursOr.update();
+            chartCoursOr.data.labels.push('J' + etat.jour);
+            chartCoursOr.data.datasets.at(0).data.push(etat.coursOr.toFixed(2));
+            chartCoursOr.update();
+        }
 
         majAffichage();
     } catch (err) {
@@ -116,7 +166,7 @@ async function initialiserJeu() {
 async function sauvegarderEnBase(actionCategory = 'MINE', actionLog = '') {
     const badge = document.getElementById('save-indicator');
     badge.className = 'ui yellow mini label';
-    badge.innerHTML = '<i class="sync loading icon"></i> Sauvegarde...';
+    badge.innerText = '⏳ Sauvegarde...';
 
     try {
         await fetch('/api/game/save', {
@@ -125,10 +175,10 @@ async function sauvegarderEnBase(actionCategory = 'MINE', actionLog = '') {
             body: JSON.stringify({ etat, parcelles, actionCategory, actionLog })
         });
         badge.className = 'ui green mini label';
-        badge.innerHTML = '<i class="database icon"></i> Synchronisé';
+        badge.innerText = '💾 Synchronisé';
     } catch (err) {
         badge.className = 'ui red mini label';
-        badge.innerHTML = '<i class="exclamation triangle icon"></i> Erreur Sync';
+        badge.innerText = '⚠️ Erreur Sync';
     }
 }
 
@@ -271,25 +321,30 @@ async function vendreOr() {
     await sauvegarderEnBase('FINANCE', `Vente de ${grammesVendus}g d'or (+${Math.round(net)} € net)`);
 }
 
+// MODALE 100 % JAVASCRIPT NATIF (SANS JQUERY NI FOMANTIC)
 function declencherEvenement() {
     const ev = EVENEMENTS.at(Math.floor(Math.random() * EVENEMENTS.length));
-    document.getElementById('eventTitle').innerText = ev.titre;
+    const modal = document.getElementById('eventModal');
+    document.getElementById('eventTitle').innerText = "⚠️ " + ev.titre;
     document.getElementById('eventDesc').innerText = ev.desc;
+    
     const choicesDiv = document.getElementById('eventChoices');
     choicesDiv.innerHTML = '';
+    
     ev.choix.forEach(c => {
         const btn = document.createElement('button');
-        btn.className = 'ui yellow button';
+        btn.className = 'ui fluid yellow button';
         btn.innerText = c.texte;
         btn.onclick = async () => {
             c.action();
-            $('#eventModal').modal('hide');
+            modal.classList.remove('open');
             majAffichage();
             await sauvegarderEnBase('MINE', `Événement [${ev.titre}] -> ${c.texte}`);
         };
         choicesDiv.appendChild(btn);
     });
-    $('#eventModal').modal({ closable: false }).modal('show');
+    
+    modal.classList.add('open');
 }
 
 // 6. SIMULATION QUOTIDIENNE
@@ -334,21 +389,23 @@ async function jourSuivant() {
     if (pActive.reserveReelle <= 0) msg += " | 🛑 FOSSE ÉPUISÉE !";
     log(msg);
 
-    const dsArgent = chartPatrimoine.data.datasets.at(0);
-    const dsOr = chartCoursOr.data.datasets.at(0);
-    if (chartPatrimoine.data.labels.length > 20) {
-        chartPatrimoine.data.labels.shift();
-        dsArgent.data.shift();
-        chartCoursOr.data.labels.shift();
-        dsOr.data.shift();
-    }
-    chartPatrimoine.data.labels.push('J' + etat.jour);
-    dsArgent.data.push(Math.round(etat.argent));
-    chartPatrimoine.update();
+    if (chartPatrimoine && chartCoursOr) {
+        const dsArgent = chartPatrimoine.data.datasets.at(0);
+        const dsOr = chartCoursOr.data.datasets.at(0);
+        if (chartPatrimoine.data.labels.length > 20) {
+            chartPatrimoine.data.labels.shift();
+            dsArgent.data.shift();
+            chartCoursOr.data.labels.shift();
+            dsOr.data.shift();
+        }
+        chartPatrimoine.data.labels.push('J' + etat.jour);
+        dsArgent.data.push(Math.round(etat.argent));
+        chartPatrimoine.update();
 
-    chartCoursOr.data.labels.push('J' + etat.jour);
-    dsOr.data.push(etat.coursOr.toFixed(2));
-    chartCoursOr.update();
+        chartCoursOr.data.labels.push('J' + etat.jour);
+        dsOr.data.push(etat.coursOr.toFixed(2));
+        chartCoursOr.update();
+    }
 
     majAffichage();
     await sauvegarderEnBase('MINE', `Jour ${etat.jour} | Trésorerie: ${Math.round(etat.argent)} € | Stock Or: ${Math.round(etat.stockOr)}g`);
@@ -379,3 +436,4 @@ async function deconnexion() {
 }
 
 initialiserJeu();
+

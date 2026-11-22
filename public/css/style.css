@@ -1,76 +1,302 @@
 /* =========================================================
-   THÈME GOLD MINE : MINE D'OR À CIEL OUVERT (STYLE EMPIRE IMMO)
+   THÈME GOLD MINE — DESIGN AUTONOME MODERNE (NOIR & OR)
    ========================================================= */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
 
 body {
-    background-color: #1c1917;
-    background-image: radial-gradient(circle at top, #292524 0%, #141210 100%);
+    background-color: #141210;
+    background-image: radial-gradient(circle at top, #292524 0%, #0c0a09 100%);
     color: #e7e5e4;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    padding-bottom: 40px;
-    margin: 0;
+    font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+    min-height: 100vh;
+    padding-bottom: 50px;
 }
 
-/* Menu supérieur */
-.ui.inverted.menu.mine-nav {
-    background: #292524;
-    border-bottom: 3px solid #d97706;
-    border-radius: 0;
-    margin-bottom: 0;
+a {
+    color: #fbbf24;
+    text-decoration: none;
+    transition: color 0.2s;
+}
+a:hover {
+    color: #fcd34d;
+    text-decoration: underline;
 }
 
-/* Barre de statut du PDG */
-.status-bar {
+/* --- BARRE DE NAVIGATION --- */
+.ui.menu.mine-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     background: #1c1917;
+    border-bottom: 3px solid #d97706;
+    padding: 12px 24px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.6);
+}
+.ui.menu.mine-nav .header.item {
+    font-size: 1.35em;
+    font-weight: 800;
+    color: #fbbf24;
+    letter-spacing: 1px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ui.menu.mine-nav .item {
+    color: #d6d3d1;
+    padding: 8px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    text-decoration: none;
+}
+.ui.menu.mine-nav .item:hover,
+.ui.menu.mine-nav .item.active {
+    background: #292524;
+    color: #fbbf24;
+}
+.ui.menu.mine-nav .right.menu {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* --- BARRE DE STATUT PDG --- */
+.status-bar {
+    background: #292524;
     border-bottom: 1px solid #44403c;
-    padding: 8px 20px;
-    margin-bottom: 20px;
+    padding: 10px 24px;
+    margin-bottom: 25px;
     font-size: 0.95em;
 }
 .status-item {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 6px;
 }
-.gold-text {
-    color: #fbbf24;
-    font-weight: bold;
-}
-.money-text {
-    color: #34d399;
-    font-weight: bold;
+.gold-text { color: #fbbf24; font-weight: bold; }
+.money-text { color: #34d399; font-weight: bold; }
+
+/* --- CONTENEURS & GRILLES --- */
+.ui.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 0 20px;
 }
 
-/* Segments & Cartes */
+.ui.grid {
+    display: grid;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+.ui.two.column.grid {
+    grid-template-columns: 1.4fr 1fr;
+}
+.ui.three.column.grid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+@media (max-width: 850px) {
+    .ui.two.column.grid,
+    .ui.three.column.grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* --- CARTES & SEGMENTS --- */
 .ui.segment.mine-card {
     background: #292524;
     border: 1px solid #44403c;
-    border-top: 3px solid #d97706;
-    color: #e7e5e4;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+    border-top: 4px solid #d97706;
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
-.ui.dividing.header.mine-header {
-    color: #fbbf24;
-    border-bottom-color: #44403c;
+.ui.inverted.segment {
+    background: #1c1917;
+    border: 1px solid #44403c;
+    border-radius: 8px;
+    padding: 16px;
 }
 
-/* Grille de prospection (Concessions à ciel ouvert) */
+.ui.dividing.header.mine-header {
+    color: #fbbf24;
+    font-size: 1.4em;
+    font-weight: 700;
+    padding-bottom: 12px;
+    margin-bottom: 18px;
+    border-bottom: 1px solid #44403c;
+}
+
+/* --- FORMULAIRES & CHAMPS --- */
+.ui.form .field {
+    margin-bottom: 16px;
+}
+.ui.form label {
+    display: block;
+    color: #d6d3d1;
+    font-weight: 600;
+    margin-bottom: 6px;
+    font-size: 0.92em;
+}
+.ui.form input,
+.ui.form select,
+.ui.form textarea,
+.ui.action.input input {
+    width: 100%;
+    padding: 11px 14px;
+    background: #141210;
+    border: 1px solid #57534e;
+    border-radius: 6px;
+    color: #f5f5f4;
+    font-size: 1em;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ui.form input:focus,
+.ui.form select:focus,
+.ui.form textarea:focus {
+    border-color: #fbbf24;
+    box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.2);
+}
+
+/* --- BOUTONS --- */
+.ui.button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 11px 18px;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.98em;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.1s, filter 0.2s;
+    color: #1c1917;
+    background: #d6d3d1;
+}
+.ui.button:hover {
+    filter: brightness(1.1);
+    transform: translateY(-1px);
+}
+.ui.button:active {
+    transform: translateY(0);
+}
+.ui.fluid.button { width: 100%; }
+.ui.huge.button { padding: 15px 24px; font-size: 1.15em; }
+.ui.mini.button { padding: 6px 10px; font-size: 0.82em; }
+
+.ui.yellow.button { background: linear-gradient(180deg, #fbbf24 0%, #d97706 100%); color: #141210; }
+.ui.green.button  { background: linear-gradient(180deg, #34d399 0%, #059669 100%); color: #064e3b; }
+.ui.orange.button { background: linear-gradient(180deg, #fb923c 0%, #ea580c 100%); color: #fff; }
+.ui.blue.button   { background: linear-gradient(180deg, #60a5fa 0%, #2563eb 100%); color: #fff; }
+.ui.red.button    { background: linear-gradient(180deg, #f87171 0%, #dc2626 100%); color: #fff; }
+
+.ui.two.buttons {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+}
+
+/* --- MESSAGES D'ALERTE & LABELS --- */
+.ui.message {
+    padding: 12px 16px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-weight: 600;
+}
+.ui.red.message { background: rgba(220, 38, 38, 0.2); border: 1px solid #ef4444; color: #fca5a5; }
+.ui.green.message { background: rgba(16, 185, 129, 0.2); border: 1px solid #10b981; color: #6ee7b7; }
+
+.ui.label {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 0.78em;
+    font-weight: 700;
+    background: #44403c;
+    color: #e7e5e4;
+}
+.ui.yellow.label { background: #d97706; color: #fff; }
+.ui.green.label  { background: #059669; color: #fff; }
+.ui.orange.label { background: #ea580c; color: #fff; }
+.ui.blue.label   { background: #2563eb; color: #fff; }
+.ui.red.label    { background: #dc2626; color: #fff; }
+
+/* --- STATISTIQUES (KPI) --- */
+.ui.statistics {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 12px;
+    text-align: center;
+}
+@media (max-width: 768px) {
+    .ui.statistics { grid-template-columns: repeat(2, 1fr); }
+}
+.ui.statistics .statistic {
+    background: #1c1917;
+    border: 1px solid #44403c;
+    border-radius: 8px;
+    padding: 14px 8px;
+}
+.ui.statistics .statistic > .value {
+    font-size: 1.5em;
+    font-weight: 800;
+    color: #fbbf24;
+}
+.ui.statistics .statistic > .label {
+    font-size: 0.8em;
+    color: #a8a29e;
+    text-transform: uppercase;
+    margin-top: 4px;
+}
+
+/* --- TABLEAUX --- */
+.ui.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+}
+.ui.table th,
+.ui.table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #44403c;
+}
+.ui.table th {
+    background: #1c1917;
+    color: #fbbf24;
+    font-weight: 700;
+}
+.ui.table tr:hover {
+    background: rgba(255, 255, 255, 0.03);
+}
+
+/* --- GRILLE DE PROSPECTION --- */
 .pit-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 10px;
+    gap: 12px;
     margin-top: 15px;
 }
 @media (max-width: 768px) {
-    .pit-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
+    .pit-grid { grid-template-columns: repeat(2, 1fr); }
 }
 .pit-tile {
     background: #1c1917;
     border: 2px solid #57534e;
-    border-radius: 6px;
-    padding: 12px 8px;
+    border-radius: 8px;
+    padding: 14px 10px;
     text-align: center;
     cursor: pointer;
     transition: all 0.2s ease;
@@ -88,32 +314,74 @@ body {
     border-color: #ef4444;
 }
 
-/* Journal radio du chantier */
+/* --- JOURNAL RADIO --- */
 #journal-log {
     background: #0c0a09;
     border: 1px solid #44403c;
-    border-radius: 4px;
-    padding: 12px;
-    height: 160px;
+    border-radius: 6px;
+    padding: 14px;
+    height: 170px;
     overflow-y: auto;
     font-family: 'Consolas', monospace;
-    font-size: 0.9em;
+    font-size: 0.92em;
     color: #d6d3d1;
+    line-height: 1.6;
 }
 
-/* Statistiques Fomantic UI */
-.ui.statistics .statistic > .value {
-    color: #f5f5f4 !important;
-}
-.ui.statistics .statistic > .label {
-    color: #a8a29e !important;
-}
-
-/* Page de connexion centrée */
-.auth-wrapper {
-    display: flex;
+/* --- FENÊTRE MODALE AUTONOME (ÉVÉNEMENTS ALÉATOIRES) --- */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.82);
+    backdrop-filter: blur(4px);
+    z-index: 9999;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
     padding: 20px;
+}
+.modal-overlay.open {
+    display: flex;
+}
+.modal-box {
+    background: #292524;
+    border: 2px solid #d97706;
+    border-radius: 12px;
+    max-width: 520px;
+    width: 100%;
+    padding: 24px;
+    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.8);
+    animation: modalPop 0.2s ease-out;
+}
+@keyframes modalPop {
+    from { transform: scale(0.92); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+.modal-header {
+    font-size: 1.35em;
+    font-weight: 800;
+    color: #fbbf24;
+    border-bottom: 1px solid #44403c;
+    padding-bottom: 12px;
+    margin-bottom: 16px;
+}
+.modal-content {
+    color: #e7e5e4;
+    font-size: 1.05em;
+    line-height: 1.5;
+    margin-bottom: 20px;
+}
+.modal-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* --- INPUT AVEC BOUTON COLLÉ (ADMIN) --- */
+.ui.action.input {
+    display: flex;
+    gap: 8px;
+}
+.ui.action.input input {
+    flex: 1;
 }
