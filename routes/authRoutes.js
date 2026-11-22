@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/welcome-text', async (req, res) => {
     try {
         const result = await pool.query("SELECT title, content FROM site_texts WHERE key = 'welcome'");
-        res.json(result.rows || TEXTES_SECOURS.welcome_intro);
+        res.json(result.rows.at(0) || TEXTES_SECOURS.welcome_intro);
     } catch (err) {
         res.json(TEXTES_SECOURS.welcome_intro);
     }
@@ -33,14 +33,14 @@ router.post('/register', async (req, res) => {
 
         const hash = await bcrypt.hash(password, 10);
         const countRes = await client.query('SELECT COUNT(*) FROM users');
-        const role = parseInt(countRes.rows.count) === 0 ? 'admin' : 'player';
+        const role = parseInt(countRes.rows.at(0).count) === 0 ? 'admin' : 'player';
         const codeValidation = genererCodeSecurite();
 
         const userRes = await client.query(
             'INSERT INTO users (username, email, password_hash, role, is_verified, verification_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, role',
             [username.trim(), cleanEmail, hash, role, false, codeValidation]
         );
-        const user = userRes.rows;
+        const user = userRes.rows.at(0);
 
         const cfg = getGameConfig();
         const parcellesInit = genererParcellesInitiales();
@@ -80,7 +80,7 @@ router.post('/verify-email', async (req, res) => {
             'UPDATE users SET is_verified = TRUE, verification_code = NULL WHERE email = $1 AND verification_code = $2 RETURNING id, username, role',
             [cleanEmail, (code || '').trim()]
         );
-        const user = result.rows;
+        const user = result.rows.at(0);
         if (!user) return res.status(400).json({ error: "Code de validation incorrect." });
 
         req.session.user = user;
@@ -94,7 +94,7 @@ router.post('/verify-email', async (req, res) => {
     }
 });
 
-// 2. CONNEXION (Crée aussi la mine automatiquement si l'utilisateur existait avant la V2)
+// 2. CONNEXION
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -103,7 +103,7 @@ router.post('/login', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT * FROM users WHERE username = $1', [username.trim()]);
-        const user = result.rows;
+        const user = result.rows.at(0);
 
         if (!user || !(await bcrypt.compare(password, user.password_hash))) {
             return res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
@@ -143,7 +143,7 @@ router.post('/forgot-password', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT id, username FROM users WHERE email = $1', [cleanEmail]);
-        const user = result.rows;
+        const user = result.rows.at(0);
         if (!user) return res.status(404).json({ error: "Aucun compte trouvé avec cet e-mail." });
 
         const code = genererCodeSecurite();
@@ -175,7 +175,7 @@ router.post('/reset-password', async (req, res) => {
             'SELECT id, username FROM users WHERE email = $1 AND reset_code = $2',
             [cleanEmail, code.trim()]
         );
-        const user = result.rows;
+        const user = result.rows.at(0);
         if (!user) return res.status(400).json({ error: "Code invalide." });
 
         const hash = await bcrypt.hash(newPassword, 10);

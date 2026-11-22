@@ -8,10 +8,10 @@ async function requireAdmin(req, res, next) {
     if (!uid) return res.status(401).json({ error: 'Non connecté' });
 
     const resUser = await pool.query('SELECT username, role FROM users WHERE id = $1', [uid]);
-    if (resUser.rows.length === 0 || resUser.rows.role !== 'admin') {
+    if (resUser.rows.length === 0 || resUser.rows.at(0).role !== 'admin') {
         return res.status(403).json({ error: 'Accès réservé aux administrateurs' });
     }
-    req.adminUsername = resUser.rows.username;
+    req.adminUsername = resUser.rows.at(0).username;
     next();
 }
 
