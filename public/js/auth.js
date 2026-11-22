@@ -1,33 +1,66 @@
-// Vérifie au chargement si le joueur a déjà une session active
-(async function verifierSession() {
+let emailEnAttenteValidation = '';
+
+// 1. VÉRIFICATION DE SESSION + CHARGEMENT TEXTE ACCUEIL & LIEN TCHATGC
+(async function initialiserAccueil() {
     try {
-        const res = await fetch('/api/auth/me');
-        const data = await res.json();
-        if (data.loggedIn) {
+        const resMe = await fetch('/api/auth/me');
+        const dataMe = await resMe.json();
+        if (dataMe.loggedIn) {
             window.location.href = '/game.html';
+            return;
         }
     } catch (err) {
         console.error("Erreur vérification session :", err);
     }
+
+    // Chargement du texte d'accueil depuis PostgreSQL
+    try {
+        const resText = await fetch('/api/auth/welcome-text');
+        if (resText.ok) {
+            const textData = await resText.json();
+            const elTitle = document.getElementById('welcome-title');
+            const elContent = document.getElementById('welcome-content');
+            if (elTitle && textData.title) elTitle.innerText = textData.title;
+            if (elContent && textData.content) elContent.innerText = textData.content;
+        }
+    } catch (err) {
+        console.error("Erreur chargement texte accueil :", err);
+    }
+
+    // Chargement du lien passerelle TchatGC
+    try {
+        const resLinks = await fetch('/api/links');
+        if (resLinks.ok) {
+            const linksData = await resLinks.json();
+            const elLink = document.getElementById('link-tchatgc');
+            if (elLink && linksData.tchatgcUrl) elLink.href = linksData.tchatgcUrl;
+        }
+    } catch (err) {
+        console.error("Erreur chargement liens :", err);
+    }
 })();
 
-// Bascule entre Connexion, Inscription et Mot de passe perdu
+// 2. BASCULE ENTRE CONNEXION, INSCRIPTION, VALIDATION MAIL ET MOT DE PASSE PERDU
 function afficherBloc(bloc) {
-    document.getElementById('form-login').style.display = bloc === 'login' ? 'block' : 'none';
-    document.getElementById('form-register').style.display = bloc === 'register' ? 'block' : 'none';
-    document.getElementById('form-forgot').style.display = bloc === 'forgot' ? 'block' : 'none';
-    document.getElementById('auth-message').style.display = 'none';
+    const blocs = new Array('login', 'register', 'verify', 'forgot');
+    blocs.forEach((nom) => {
+        const el = document.getElementById('form-' + nom);
+        if (el) el.style.display = bloc === nom ? 'block' : 'none';
+    });
+    const alertBox = document.getElementById('auth-message');
+    if (alertBox) alertBox.style.display = 'none';
 }
 
 // Affiche un message d'erreur ou de succès
 function afficherAlerte(texte, estErreur = true) {
     const box = document.getElementById('auth-message');
+    if (!box) return;
     box.className = estErreur ? 'ui red message' : 'ui green message';
     box.innerText = texte;
     box.style.display = 'block';
 }
 
-// Envoi formulaire Connexion
+// 3. ENVOI FORMULAIRE CONNEXION
 document.getElementById('form-login').onsubmit = async (e) => {
     e.preventDefault();
     const res = await fetch('/api/auth/login', {
@@ -41,12 +74,18 @@ document.getElementById('form-login').onsubmit = async (e) => {
     const data = await res.json();
     if (data.success) {
         window.location.href = '/game.html';
+    } else if (data.unverifiedEmail) {
+        emailEnAttenteValidation = data.unverifiedEmail;
+        const elDisplay = document.getElementById('verify-email-display');
+        if (elDisplay) elDisplay.innerText = emailEnAttenteValidation;
+        afficherBloc('verify');
+        afficherAlerte(data.error, true);
     } else {
         afficherAlerte(data.error);
     }
 };
 
-// Envoi formulaire Inscription
+// 4. ENVOI FORMULAIRE INSCRIPTION (ENVOIE LE CODE À 6 CHIFFRES)
 document.getElementById('form-register').onsubmit = async (e) => {
     e.preventDefault();
     const res = await fetch('/api/auth/register', {
@@ -59,14 +98,43 @@ document.getElementById('form-register').onsubmit = async (e) => {
         })
     });
     const data = await res.json();
-    if (data.success) {
+    if (data.success && data.requireVerification) {
+        emailEnAttenteValidation = data.email;
+        const elDisplay = document.getElementById('verify-email-display');
+        if (elDisplay) elDisplay.innerText = emailEnAttenteValidation;
+        afficherBloc('verify');
+        afficherAlerte("Un code de validation à 6 chiffres vient d'être envoyé par e-mail.", false);
+    } else if (data.success) {
         window.location.href = '/game.html';
     } else {
         afficherAlerte(data.error);
     }
 };
 
-// Demande de code Mot de passe perdu
+// 5. VALIDATION DU CODE REÇU PAR E-MAIL
+const formVerify = document.getElementById('form-verify');
+if (formVerify) {
+    formVerify.onsubmit = async (e) => {
+        e.preventDefault();
+        const codeSaisi = document.getElementById('verify-code').value;
+        const res = await fetch('/api/auth/verify-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: emailEnAttenteValidation,
+                code: codeSaisi
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            window.location.href = '/game.html';
+        } else {
+            afficherAlerte(data.error);
+        }
+    };
+}
+
+// 6. DEMANDE DE CODE MOT DE PASSE PERDU
 document.getElementById('form-forgot').onsubmit = async (e) => {
     e.preventDefault();
     const res = await fetch('/api/auth/forgot-password', {
@@ -85,7 +153,7 @@ document.getElementById('form-forgot').onsubmit = async (e) => {
     }
 };
 
-// Validation du nouveau mot de passe avec le code à 6 chiffres
+// 7. VALIDATION DU NOUVEAU MOT DE PASSE AVEC LE CODE À 6 CHIFFRES
 async function validerNouveauMdp() {
     const res = await fetch('/api/auth/reset-password', {
         method: 'POST',

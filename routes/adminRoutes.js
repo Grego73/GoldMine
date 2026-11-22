@@ -9,7 +9,7 @@ const router = express.Router();
 router.get('/users', requireAdmin, async (req, res) => {
     try {
         const result = await pool.query(`
-            SELECT u.id, u.username, u.email, u.role, u.is_banned, m.jour, m.argent, m.stock_or, m.foreuses
+            SELECT u.id, u.username, u.email, u.role, u.is_banned, u.is_verified, m.jour, m.argent, m.stock_or, m.foreuses
             FROM users u
             LEFT JOIN mines m ON u.id = m.user_id
             ORDER BY u.id ASC
@@ -83,7 +83,7 @@ router.post('/settings', requireAdmin, async (req, res) => {
 
     try {
         await pool.query('UPDATE game_settings SET value = $1 WHERE key = $2', [val, key]);
-        await loadGameConfig(); // Recharge immédiatement la nouvelle valeur en mémoire
+        await loadGameConfig();
 
         await pool.query(
             'INSERT INTO admin_logs (admin_username, action) VALUES ($1, $2)',
@@ -103,6 +103,57 @@ router.get('/logs', requireAdmin, async (req, res) => {
         res.json(result.rows);
     } catch (err) {
         res.status(500).json({ error: "Erreur lecture des logs." });
+    }
+});
+
+// 7. LIRE LES TEXTES DU SITE (site_texts)
+router.get('/texts', requireAdmin, async (req, res) => {
+    try {
+        const result = await pool.query('SELECT key, title, content FROM site_texts ORDER BY key ASC');
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erreur admin GET /texts :", err);
+        res.status(500).json({ error: "Erreur lecture des textes du site." });
+    }
+});
+
+// 8. METTRE À JOUR UN TEXTE DU SITE
+router.post('/texts', requireAdmin, async (req, res) => {
+    const { key, title, content } = req.body;
+    if (!key || !title || !content) {
+        return res.status(400).json({ error: "Le titre et le contenu ne peuvent pas être vides." });
+    }
+
+    try {
+        await pool.query('UPDATE site_texts SET title = $1, content = $2 WHERE key = $3', [title.trim(), content.trim(), key]);
+        await pool.query(
+            'INSERT INTO admin_logs (admin_username, action) VALUES ($1, $2)',
+            [req.session.user.username, `Modification du texte d'accueil [${key}]`]
+        );
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Erreur admin POST /texts :", err);
+        res.status(500).json({ error: "Erreur lors de la sauvegarde du texte." });
+    }
+});
+
+// 9. LIRE LES LOGS D'ACTIVITÉ DES JOUEURS (100 dernières actions)
+router.get('/player-logs', requireAdmin, async (req, res) => {
+    const search = (req.query.username || '').trim();
+    try {
+        let result;
+        if (search) {
+            result = await pool.query(
+                'SELECT * FROM player_logs WHERE username ILIKE $1 ORDER BY created_at DESC LIMIT 100',
+                [`%${search}%`]
+            );
+        } else {
+            result = await pool.query('SELECT * FROM player_logs ORDER BY created_at DESC LIMIT 100');
+        }
+        res.json(result.rows);
+    } catch (err) {
+        console.error("Erreur admin GET /player-logs :", err);
+        res.status(500).json({ error: "Erreur lecture des logs joueurs." });
     }
 });
 

@@ -16,14 +16,7 @@ const chartPatrimoine = new Chart(document.getElementById('chartPatrimoine').get
             tension: 0.3
         })
     },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { ticks: { color: '#a8a29e' } },
-            y: { ticks: { color: '#a8a29e' } }
-        }
-    }
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a8a29e' } }, y: { ticks: { color: '#a8a29e' } } } }
 });
 
 const chartCoursOr = new Chart(document.getElementById('chartCoursOr').getContext('2d'), {
@@ -39,14 +32,7 @@ const chartCoursOr = new Chart(document.getElementById('chartCoursOr').getContex
             tension: 0.3
         })
     },
-    options: {
-        responsive: true,
-        plugins: { legend: { display: false } },
-        scales: {
-            x: { ticks: { color: '#a8a29e' } },
-            y: { ticks: { color: '#a8a29e' } }
-        }
-    }
+    options: { responsive: true, plugins: { legend: { display: false } }, scales: { x: { ticks: { color: '#a8a29e' } }, y: { ticks: { color: '#a8a29e' } } } }
 });
 
 // 2. CATALOGUE DES ÉVÉNEMENTS ALÉATOIRES
@@ -55,54 +41,23 @@ const EVENEMENTS = new Array(
         titre: "Glissement de terrain sur le gradin Nord",
         desc: "Les fortes pluies fragilisent la paroi de la mine à ciel ouvert.",
         choix: new Array(
-            {
-                texte: "Sécuriser avec des soutènements (3 000 €)",
-                action: () => {
-                    etat.argent -= 3000;
-                    log("Paroi stabilisée. Aucun blessé.");
-                }
-            },
-            {
-                texte: "Continuer l'extraction (-25% Moral équipes)",
-                action: () => {
-                    etat.moral = Math.max(0, etat.moral - 25);
-                    log("Les équipes travaillent sous la peur d'un éboulement.");
-                }
-            }
+            { texte: "Sécuriser avec des soutènements (3 000 €)", action: () => { etat.argent -= 3000; log("Paroi stabilisée. Aucun blessé."); } },
+            { texte: "Continuer l'extraction (-25% Moral équipes)", action: () => { etat.moral = Math.max(0, etat.moral - 25); log("Les équipes travaillent sous la peur d'un éboulement."); } }
         )
     },
     {
         titre: "Flambée de la demande en joaillerie",
         desc: "Les acheteurs internationaux se ruent sur l'or physique !",
         choix: new Array(
-            {
-                texte: "Excellente nouvelle ! (+12% sur le cours de l'or)",
-                action: () => {
-                    etat.coursOr = Math.min(CONFIG.coursOrMax, etat.coursOr * 1.12);
-                    log("Le cours de l'or bondit sur les marchés !");
-                }
-            }
+            { texte: "Excellente nouvelle ! (+12% sur le cours de l'or)", action: () => { etat.coursOr = Math.min(CONFIG.coursOrMax, etat.coursOr * 1.12); log("Le cours de l'or bondit sur les marchés !"); } }
         )
     },
     {
         titre: "Mouvement social des conducteurs d'engins",
         desc: "Les opérateurs réclament une prime de poussière et de chaleur.",
         choix: new Array(
-            {
-                texte: "Verser une prime (2 000 € / +20% Moral)",
-                action: () => {
-                    etat.argent -= 2000;
-                    etat.moral = Math.min(100, etat.moral + 20);
-                    log("Prime versée. Le moral remonte en flèche.");
-                }
-            },
-            {
-                texte: "Refuser (-30% Moral)",
-                action: () => {
-                    etat.moral = Math.max(0, etat.moral - 30);
-                    log("Tensions syndicales sur le site.");
-                }
-            }
+            { texte: "Verser une prime (2 000 € / +20% Moral)", action: () => { etat.argent -= 2000; etat.moral = Math.min(100, etat.moral + 20); log("Prime versée. Le moral remonte en flèche."); } },
+            { texte: "Refuser (-30% Moral)", action: () => { etat.moral = Math.max(0, etat.moral - 30); log("Tensions syndicales sur le site."); } }
         )
     }
 );
@@ -123,6 +78,13 @@ async function initialiserJeu() {
         document.getElementById('stat-username').innerText = data.user.username;
         if (data.user.role === 'admin') {
             document.getElementById('btn-admin-link').style.display = 'flex';
+        }
+
+        // Lien passerelle TchatGC
+        const resLinks = await fetch('/api/links');
+        const dataLinks = await resLinks.json();
+        if (dataLinks.tchatgcUrl) {
+            document.getElementById('link-tchatgc-game').href = dataLinks.tchatgcUrl;
         }
 
         // Affichage des prix dynamiques issus de la table game_settings
@@ -150,8 +112,8 @@ async function initialiserJeu() {
     }
 }
 
-// 4. SAUVEGARDE AUTOMATIQUE EN BASE POSTGRESQL
-async function sauvegarderEnBase() {
+// 4. SAUVEGARDE AUTOMATIQUE EN BASE POSTGRESQL + LOG JOUEUR
+async function sauvegarderEnBase(actionCategory = 'MINE', actionLog = '') {
     const badge = document.getElementById('save-indicator');
     badge.className = 'ui yellow mini label';
     badge.innerHTML = '<i class="sync loading icon"></i> Sauvegarde...';
@@ -160,7 +122,7 @@ async function sauvegarderEnBase() {
         await fetch('/api/game/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ etat, parcelles })
+            body: JSON.stringify({ etat, parcelles, actionCategory, actionLog })
         });
         badge.className = 'ui green mini label';
         badge.innerHTML = '<i class="database icon"></i> Synchronisé';
@@ -170,7 +132,6 @@ async function sauvegarderEnBase() {
     }
 }
 
-// 5. NAVIGATION ENTRE ONGLETS
 function changerOnglet(nomOnglet, elementMenu) {
     document.querySelectorAll('.tab-section').forEach(el => el.style.display = 'none');
     document.getElementById('tab-' + nomOnglet).style.display = 'block';
@@ -178,7 +139,6 @@ function changerOnglet(nomOnglet, elementMenu) {
     elementMenu.classList.add('active');
 }
 
-// 6. MISE À JOUR DE L'AFFICHAGE
 function majAffichage() {
     const pActive = parcelles.at(etat.parcelleActive);
     document.getElementById('stat-jour').innerText = etat.jour;
@@ -232,7 +192,7 @@ async function interagirParcelle(id) {
             p.estimationPurete = Math.max(1, (p.pureteReelle * (1 + erreur))).toFixed(1);
             log(`Rapport géologique (${p.nom}) : teneur estimée à ~${p.estimationPurete} g/t.`);
             majAffichage();
-            await sauvegarderEnBase();
+            await sauvegarderEnBase('PROSPECTION', `Carottage sur ${p.nom} (-${CONFIG.coutCarottage} €)`);
         } else {
             log(`❌ Trésorerie insuffisante (${CONFIG.coutCarottage} €).`);
         }
@@ -242,7 +202,7 @@ async function interagirParcelle(id) {
             etat.parcelleActive = id;
             log(`🚜 Transfert des excavatrices vers le ${p.nom} (Teneur réelle : ${p.pureteReelle} g/t).`);
             majAffichage();
-            await sauvegarderEnBase();
+            await sauvegarderEnBase('PROSPECTION', `Déménagement vers ${p.nom} (-${CONFIG.coutDemenagement} €)`);
         } else {
             log(`❌ Trésorerie insuffisante (${CONFIG.coutDemenagement} €).`);
         }
@@ -254,14 +214,14 @@ function log(msg) {
     box.innerHTML = `<div><span style="color:#fbbf24;">[Jour ${etat.jour}]</span> ${msg}</div>` + box.innerHTML;
 }
 
-// 7. ACTIONS DU JOUEUR
+// 5. ACTIONS DU JOUEUR
 async function embaucher() {
     if (etat.argent >= CONFIG.coutMineur) {
         etat.argent -= CONFIG.coutMineur;
         etat.mineurs++;
         log("Nouvel opérateur recruté.");
         majAffichage();
-        await sauvegarderEnBase();
+        await sauvegarderEnBase('MINE', `Recrutement 1 mineur (Total: ${etat.mineurs})`);
     }
 }
 
@@ -271,7 +231,7 @@ async function acheterForeuse() {
         etat.foreuses++;
         log("Nouvelle excavatrice mise en service !");
         majAffichage();
-        await sauvegarderEnBase();
+        await sauvegarderEnBase('MINE', `Achat 1 excavatrice (Total: ${etat.foreuses})`);
     }
 }
 
@@ -281,7 +241,7 @@ async function reparer() {
         etat.usure = Math.max(0, etat.usure - 25);
         log("Révision atelier terminée (-25% usure).");
         majAffichage();
-        await sauvegarderEnBase();
+        await sauvegarderEnBase('MINE', `Révision atelier (-${CONFIG.coutRevision} €)`);
     }
 }
 
@@ -291,7 +251,7 @@ async function primeMoral() {
         etat.moral = Math.min(100, etat.moral + 15);
         log("Prime versée aux équipes (+15% moral).");
         majAffichage();
-        await sauvegarderEnBase();
+        await sauvegarderEnBase('MINE', `Prime versée aux équipes (-${CONFIG.coutPrime} €)`);
     }
 }
 
@@ -303,11 +263,12 @@ async function vendreOr() {
     let brut = etat.stockOr * etat.coursOr;
     let impots = brut * CONFIG.taxeMiniere;
     let net = brut - impots;
+    const grammesVendus = Math.round(etat.stockOr);
     etat.argent += net;
-    log(`💰 Vente de ${Math.round(etat.stockOr)}g d'or à ${etat.coursOr.toFixed(2)}€/g. Gain net : +${Math.round(net).toLocaleString()} €.`);
+    log(`💰 Vente de ${grammesVendus}g d'or à ${etat.coursOr.toFixed(2)}€/g. Gain net : +${Math.round(net).toLocaleString()} €.`);
     etat.stockOr = 0;
     majAffichage();
-    await sauvegarderEnBase();
+    await sauvegarderEnBase('FINANCE', `Vente de ${grammesVendus}g d'or (+${Math.round(net)} € net)`);
 }
 
 function declencherEvenement() {
@@ -324,45 +285,37 @@ function declencherEvenement() {
             c.action();
             $('#eventModal').modal('hide');
             majAffichage();
-            await sauvegarderEnBase();
+            await sauvegarderEnBase('MINE', `Événement [${ev.titre}] -> ${c.texte}`);
         };
         choicesDiv.appendChild(btn);
     });
     $('#eventModal').modal({ closable: false }).modal('show');
 }
 
-// 8. SIMULATION QUOTIDIENNE (JOUR SUIVANT)
+// 6. SIMULATION QUOTIDIENNE
 async function jourSuivant() {
     etat.jour++;
     const cadence = parseFloat(document.getElementById('cadence').value);
     const pActive = parcelles.at(etat.parcelleActive);
 
-    // Variation du cours de l'or
     etat.coursOr = Math.max(CONFIG.coursOrMin, Math.min(CONFIG.coursOrMax, etat.coursOr * (1 + (Math.random() * 8 - 4) / 100)));
-
-    // Moral & Grève
     etat.moral = Math.max(0, Math.min(100, etat.moral - ((cadence - 1) * 20) + 2));
     let greve = etat.moral < 25;
 
-    // Usure & Panne
     etat.usure = Math.min(100, etat.usure + (etat.foreuses * CONFIG.usureParForeuse * cadence));
     let panne = (Math.random() * 100) < etat.usure;
 
-    // Extraction
     let prodMineurs = greve ? 0 : (etat.mineurs * CONFIG.prodMineurTonnes * cadence * (etat.moral / 100));
     let prodForeuses = panne ? 0 : (etat.foreuses * CONFIG.prodForeuseTonnes * cadence);
     let rocheExtraite = Math.min(pActive.reserveReelle, prodMineurs + prodForeuses);
     pActive.reserveReelle -= rocheExtraite;
 
-    // Raffinage en stock d'or
     let orProduit = rocheExtraite * pActive.pureteReelle;
     etat.stockOr += orProduit;
 
-    // Coûts fixes
     let couts = (etat.mineurs * CONFIG.salaireMineurJour) + (etat.foreuses * CONFIG.carburantForeuseJour);
     etat.argent -= couts;
 
-    // Conseils dynamiques de Nadège
     if (etat.coursOr > 72) {
         document.getElementById('conseil-assistante').innerText = "« Le cours de l'or est au plus haut (" + etat.coursOr.toFixed(2) + " €/g) ! Allez dans Coffre & Bourse pour vendre vos lingots ! »";
     } else if (pActive.reserveReelle < 250) {
@@ -381,7 +334,6 @@ async function jourSuivant() {
     if (pActive.reserveReelle <= 0) msg += " | 🛑 FOSSE ÉPUISÉE !";
     log(msg);
 
-    // Mise à jour des graphiques
     const dsArgent = chartPatrimoine.data.datasets.at(0);
     const dsOr = chartCoursOr.data.datasets.at(0);
     if (chartPatrimoine.data.labels.length > 20) {
@@ -399,12 +351,11 @@ async function jourSuivant() {
     chartCoursOr.update();
 
     majAffichage();
-    await sauvegarderEnBase();
+    await sauvegarderEnBase('MINE', `Jour ${etat.jour} | Trésorerie: ${Math.round(etat.argent)} € | Stock Or: ${Math.round(etat.stockOr)}g`);
 
     if (Math.random() < CONFIG.chanceEvenement) declencherEvenement();
 }
 
-// 9. CLASSEMENT & DÉCONNEXION
 async function chargerClassement() {
     const res = await fetch('/api/game/ranking');
     if (!res.ok) return;
@@ -427,5 +378,4 @@ async function deconnexion() {
     window.location.href = '/index.html';
 }
 
-// Lancement initial
 initialiserJeu();

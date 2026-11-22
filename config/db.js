@@ -1,19 +1,19 @@
 const { Pool } = require('pg');
 require('dotenv').config();
 
-// Connexion à PostgreSQL (Neon / Render)
+// Connexion à PostgreSQL (Neon)
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
 });
 
-// Fonction de création automatique des tables au démarrage
+// Fonction de création automatique des 6 tables au démarrage
 async function initDatabase() {
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
 
-        // 1. Table des comptes joueurs (Inscription, Connexion, Rôle Admin, Mot de passe perdu)
+        // 1. Table des comptes joueurs
         await client.query(`
             CREATE TABLE IF NOT EXISTS users (
                 id SERIAL PRIMARY KEY,
@@ -22,10 +22,18 @@ async function initDatabase() {
                 password_hash TEXT NOT NULL,
                 role VARCHAR(20) DEFAULT 'player',
                 is_banned BOOLEAN DEFAULT FALSE,
+                is_verified BOOLEAN DEFAULT FALSE,
+                verification_code VARCHAR(10),
                 reset_code VARCHAR(10),
                 reset_expires TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+        `);
+
+        await client.query(`
+            ALTER TABLE users
+            ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT FALSE,
+            ADD COLUMN IF NOT EXISTS verification_code VARCHAR(10);
         `);
 
         // 2. Table des mines (Sauvegarde de l'exploitation de chaque PDG)
@@ -56,7 +64,7 @@ async function initDatabase() {
             );
         `);
 
-        // 4. Table des paramètres d'équilibrage modifiables depuis l'Admin
+        // 4. Table des 18 paramètres d'équilibrage modifiables depuis l'Admin
         await client.query(`
             CREATE TABLE IF NOT EXISTS game_settings (
                 key VARCHAR(50) PRIMARY KEY,
@@ -65,7 +73,6 @@ async function initDatabase() {
             );
         `);
 
-        // Insertion des valeurs par défaut si la table est vide
         await client.query(`
             INSERT INTO game_settings (key, value, label) VALUES
                 ('argentDepart', 50000, 'Trésorerie de départ (€)'),
@@ -89,12 +96,40 @@ async function initDatabase() {
             ON CONFLICT (key) DO NOTHING;
         `);
 
-        // Index pour accélérer les recherches et le classement
+        // 5. Table des textes du site modifiables depuis l'Admin
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS site_texts (
+                key VARCHAR(50) PRIMARY KEY,
+                title VARCHAR(150) NOT NULL,
+                content TEXT NOT NULL
+            );
+        `);
+
+        await client.query(`
+            INSERT INTO site_texts (key, title, content) VALUES
+                ('welcome_intro', 'Bienvenue dans Gold Mine — Simulation Minière', 'Prenez la tête d''une exploitation aurifère à ciel ouvert ! Prospectez de nouveaux filons, gérez votre flotte d''excavatrices, surveillez le moral de vos équipes et spéculez sur le cours mondial de l''or pour bâtir le plus grand empire minier.')
+            ON CONFLICT (key) DO NOTHING;
+        `);
+
+        // 6. Table des journaux d'activité des joueurs
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS player_logs (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                username VARCHAR(50) NOT NULL,
+                category VARCHAR(30) NOT NULL,
+                details TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Index pour accélérer les recherches
         await client.query(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);`);
         await client.query(`CREATE INDEX IF NOT EXISTS idx_mines_argent ON mines(argent DESC);`);
+        await client.query(`CREATE INDEX IF NOT EXISTS idx_player_logs_created ON player_logs(created_at DESC);`);
 
         await client.query('COMMIT');
-        console.log("✅ Tables PostgreSQL Gold Mine initialisées avec succès.");
+        console.log("✅ Les 6 tables PostgreSQL Gold Mine ont été créées avec succès.");
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("❌ Erreur lors de la création des tables PostgreSQL :", err);

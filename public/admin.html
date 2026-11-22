@@ -34,6 +34,7 @@
                             <th>ID</th>
                             <th>PDG</th>
                             <th>E-mail</th>
+                            <th>Statut</th>
                             <th>Rôle</th>
                             <th>Jour</th>
                             <th>Trésorerie</th>
@@ -54,7 +55,36 @@
             <div class="ui three column stackable grid" id="admin-settings-grid"></div>
         </section>
 
-        <!-- 3. JOURNAUX D'ADMINISTRATION -->
+        <!-- 3. TEXTES DE PRÉSENTATION DU SITE -->
+        <section class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header"><i class="edit outline icon"></i> Textes de la Page d'Accueil</h3>
+            <p style="color: #a8a29e; font-size: 0.9em;">Modifiez ici le titre et l'explication du but du jeu affichés aux visiteurs sur la page d'accueil.</p>
+            <div id="admin-texts-container"></div>
+        </section>
+
+        <!-- 4. ACTIVITÉ COMPLÈTE DES JOUEURS -->
+        <section class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header"><i class="eye icon"></i> Suivi d'activité des Joueurs (100 dernières actions)</h3>
+            <div class="ui action input" style="margin-bottom: 15px;">
+                <input type="text" id="filter-player-log" placeholder="Filtrer par pseudo PDG...">
+                <button class="ui yellow button" onclick="chargerLogsJoueurs()">Filtrer / Actualiser</button>
+            </div>
+            <div style="max-height: 320px; overflow-y: auto;">
+                <table class="ui inverted celled compact table">
+                    <thead>
+                        <tr>
+                            <th>Date & Heure</th>
+                            <th>PDG</th>
+                            <th>Catégorie</th>
+                            <th>Détail de l'action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-player-logs-list"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- 5. JOURNAUX D'ADMINISTRATION -->
         <section class="ui segment mine-card">
             <h3 class="ui dividing header mine-header"><i class="history icon"></i> Dernières actions d'administration</h3>
             <div id="admin-logs-list" style="font-family: monospace; font-size: 0.9em; color: #d6d3d1;"></div>

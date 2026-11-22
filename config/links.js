@@ -9,7 +9,7 @@ const LINKS = {
     tchatgcUrl: process.env.TCHATGC_URL || 'https://tchatgc-1.onrender.com',
 
     // Services externes (pour l'envoi d'e-mails Brevo à venir)
-    brevoApiUrl: 'https://brevo.com'
+    brevoApiUrl: 'https://api.brevo.com/v3/smtp/email'
 };
 
 module.exports = LINKS;

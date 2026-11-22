@@ -2,6 +2,7 @@ const express = require('express');
 const { pool } = require('../config/db');
 const { getGameConfig } = require('../config/gameConfig');
 const { requireAuth } = require('../utils/authMiddleware');
+const { logJoueur } = require('../utils/logger');
 
 const router = express.Router();
 
@@ -37,9 +38,9 @@ router.get('/state', requireAuth, async (req, res) => {
     }
 });
 
-// 2. SAUVEGARDER LA MINE EN BASE DE DONNÉES
+// 2. SAUVEGARDER LA MINE EN BASE DE DONNÉES + ENREGISTRER LE LOG JOUEUR
 router.post('/save', requireAuth, async (req, res) => {
-    const { etat, parcelles } = req.body;
+    const { etat, parcelles, actionCategory, actionLog } = req.body;
     if (!etat || !parcelles) {
         return res.status(400).json({ error: "Données de sauvegarde manquantes." });
     }
@@ -72,6 +73,15 @@ router.post('/save', requireAuth, async (req, res) => {
             JSON.stringify(parcelles),
             req.session.user.id
         ]);
+
+        if (actionLog) {
+            await logJoueur(
+                req.session.user.id,
+                req.session.user.username,
+                actionCategory || 'MINE',
+                actionLog
+            );
+        }
 
         res.json({ success: true });
     } catch (err) {

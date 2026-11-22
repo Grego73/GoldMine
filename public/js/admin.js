@@ -20,10 +20,15 @@ async function chargerJoueurs() {
 
     users.forEach(u => {
         const tr = document.createElement('tr');
+        const badgeVerif = u.is_verified
+            ? '<span class="ui green mini label">Validé</span>'
+            : '<span class="ui orange mini label">En attente</span>';
+
         tr.innerHTML = `
             <td>#${u.id}</td>
             <td><strong>${u.username}</strong> ${u.is_banned ? '<span class="ui red mini label">BANNI</span>' : ''}</td>
             <td>${u.email}</td>
+            <td>${badgeVerif}</td>
             <td><span class="ui ${u.role === 'admin' ? 'yellow' : 'grey'} mini label">${u.role}</span></td>
             <td>J${u.jour || 1}</td>
             <td class="money-text">${Math.round(u.argent || 0).toLocaleString()} €</td>
@@ -108,7 +113,80 @@ async function sauvegarderParametre(key) {
     }
 }
 
-// 3. CHARGER LES LOGS ADMIN
+// 3. CHARGER ET MODIFIER LES TEXTES DU SITE
+async function chargerTextes() {
+    const res = await fetch('/api/admin/texts');
+    if (!res.ok) return;
+    const texts = await res.json();
+    const container = document.getElementById('admin-texts-container');
+    container.innerHTML = '';
+
+    texts.forEach(t => {
+        const div = document.createElement('div');
+        div.className = 'ui inverted form';
+        div.style.cssText = 'background: #1c1917; border: 1px solid #44403c; padding: 15px; border-radius: 6px; margin-bottom: 10px;';
+        div.innerHTML = `
+            <div class="field">
+                <label style="color: #fbbf24;">Titre principal (${t.key})</label>
+                <input type="text" id="text-title-${t.key}" value="${t.title.replace(/"/g, '&quot;')}">
+            </div>
+            <div class="field">
+                <label style="color: #fbbf24;">Description / But du jeu</label>
+                <textarea rows="4" id="text-content-${t.key}">${t.content}</textarea>
+            </div>
+            <button class="ui yellow button" onclick="sauvegarderTexte('${t.key}')">
+                <i class="save icon"></i> Enregistrer le texte d'accueil
+            </button>
+        `;
+        container.appendChild(div);
+    });
+}
+
+async function sauvegarderTexte(key) {
+    const title = document.getElementById('text-title-' + key).value;
+    const content = document.getElementById('text-content-' + key).value;
+
+    const res = await fetch('/api/admin/texts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, title, content })
+    });
+    const data = await res.json();
+    if (data.success) {
+        afficherNotificationAdmin("Texte d'accueil mis à jour avec succès !");
+        chargerLogs();
+    } else {
+        afficherNotificationAdmin(data.error, true);
+    }
+}
+
+// 4. CHARGER LE SUIVI D'ACTIVITÉ DES JOUEURS
+async function chargerLogsJoueurs() {
+    const filter = document.getElementById('filter-player-log').value;
+    const res = await fetch('/api/admin/player-logs?username=' + encodeURIComponent(filter));
+    if (!res.ok) return;
+    const logs = await res.json();
+    const tbody = document.getElementById('admin-player-logs-list');
+
+    tbody.innerHTML = logs.map(l => {
+        const date = new Date(l.created_at).toLocaleString('fr-FR');
+        let badgeColor = 'grey';
+        if (l.category === 'AUTH') badgeColor = 'blue';
+        if (l.category === 'FINANCE') badgeColor = 'green';
+        if (l.category === 'PROSPECTION') badgeColor = 'orange';
+
+        return `
+            <tr>
+                <td style="white-space: nowrap; color: #a8a29e;">${date}</td>
+                <td><strong>${l.username}</strong></td>
+                <td><span class="ui ${badgeColor} mini label">${l.category}</span></td>
+                <td>${l.details}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// 5. CHARGER LES LOGS ADMIN
 async function chargerLogs() {
     const res = await fetch('/api/admin/logs');
     if (!res.ok) return;
@@ -123,4 +201,6 @@ async function chargerLogs() {
 // Initialisation au chargement
 chargerJoueurs();
 chargerParametres();
+chargerTextes();
+chargerLogsJoueurs();
 chargerLogs();
