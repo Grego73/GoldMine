@@ -26,7 +26,9 @@ async function envoyerEmail(destinataire, sujet, contenuHtml) {
     `;
 
     try {
-        const response = await fetch('https://brevo.com', {
+        const LINKS = require('../config/links');
+        // ... et dans fetch :
+        const response = await fetch(LINKS.brevoApiUrl, {
             method: 'POST',
             headers: {
                 'accept': 'application/json',

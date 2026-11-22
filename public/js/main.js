@@ -324,13 +324,14 @@ setInterval(() => {
     if (elCloture) elCloture.innerText = `⏳ Clôture : ${h}h${m}`;
 
     if (market.clients && market.clients.length > 0) {
-        const exp = new Date(market.clients.expires_at);
+        const exp = new Date(market.clients.at(0).expires_at);
         const diffMkt = Math.max(0, Math.floor((exp - now) / 1000));
         const mh = String(Math.floor(diffMkt / 3600)).padStart(2, '0');
         const mm = String(Math.floor((diffMkt % 3600) / 60)).padStart(2, '0');
         const elMkt = document.getElementById('countdown-marche');
         if (elMkt) elMkt.innerText = `Renouvellement dans ${mh}h${mm}`;
     }
+
 }, 1000);
 
 chargerEtatJeu();

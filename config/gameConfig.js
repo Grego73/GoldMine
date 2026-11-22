@@ -1,52 +1,29 @@
 const { pool } = require('./db');
 
-// Valeurs de secours par défaut (complétées/écrasées par la table game_settings)
-let cachedConfig = {
-    argentDepart: 15000,
-    coursOrInitial: 60.00,
-    coursOrMin: 35.00,
-    coursOrMax: 120.00,
-    taxeMiniere: 0.08,
-    coutMineur: 800,
-    coutForeuse: 5000,
-    coutRevision: 1200,
-    coutPrime: 1000,
-    coutCarottage: 1500,
-    coutDemenagement: 3000,
-    coutPanneForcee: 2500,
-    salaireMineurJour: 120,
-    carburantForeuseJour: 450,
-    prodMineurTonnes: 2,
-    prodForeuseTonnes: 15,
-    usureParForeuse: 4,
-    chanceEvenement: 0.30,
-    // Nouvelles variables V2 (Horloge, Bourse 4h, Clients & Marketing)
-    heureClotureJour: 3,
-    cycleMarcheHeures: 4,
-    nbClientsMarche: 10,
-    margeNegociationMax: 0.15,
-    coutUniteMarketing: 1000,
-    usureMarketingJour: 0.10,
-    seuilEtudeMarche: 25,
-    impactOffreDemande: 0.02
-};
+// Cache uniquement alimenté par PostgreSQL (aucune valeur codée en dur ici)
+let cachedConfig = null;
 
-// Charge tous les paramètres depuis PostgreSQL et met à jour le cache
+// Charge tous les paramètres depuis PostgreSQL (lève une erreur si la BDD est inaccessible)
 async function loadGameConfig() {
-    try {
-        const res = await pool.query('SELECT key, value FROM game_settings');
-        res.rows.forEach(row => {
-            cachedConfig[row.key] = parseFloat(row.value);
-        });
-        return cachedConfig;
-    } catch (err) {
-        console.error("Erreur lecture game_settings :", err);
-        return cachedConfig;
+    const res = await pool.query('SELECT key, value FROM game_settings');
+    if (res.rows.length === 0) {
+        throw new Error('Table game_settings vide ou introuvable en base de données.');
     }
+
+    const freshConfig = {};
+    res.rows.forEach(row => {
+        freshConfig[row.key] = parseFloat(row.value);
+    });
+
+    cachedConfig = freshConfig;
+    return cachedConfig;
 }
 
-// Retourne la configuration en mémoire instantanément
+// Retourne la configuration chargée depuis la BDD (ou lève une erreur si non chargée)
 function getGameConfig() {
+    if (!cachedConfig) {
+        throw new Error('Configuration du jeu non chargée (Base de données indisponible).');
+    }
     return cachedConfig;
 }
 

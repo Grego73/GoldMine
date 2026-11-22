@@ -345,14 +345,17 @@ router.post('/event-choice', requireAuth, async (req, res) => {
 // 5. CLASSEMENT DES COMPAGNIES MINIÈRES
 router.get('/ranking', requireAuth, async (req, res) => {
     try {
+        const mktRes = await pool.query('SELECT cours_or FROM market_state WHERE id = 1');
+        const coursActuel = mktRes.rows.length > 0 ? parseFloat(mktRes.rows.at(0).cours_or) : 60;
+
         const resRank = await pool.query(`
             SELECT u.username, m.jour, m.argent, m.stock_or, m.foreuses, m.marketing_points
             FROM mines m
             JOIN users u ON u.id = m.user_id
             WHERE u.is_banned = FALSE
-            ORDER BY (m.argent + m.stock_or * 60) DESC
+            ORDER BY (m.argent + m.stock_or * $1) DESC
             LIMIT 15
-        `);
+        `, [coursActuel]);
         res.json(resRank.rows);
     } catch (err) {
         res.status(500).json({ error: 'Erreur classement' });

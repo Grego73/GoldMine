@@ -3,7 +3,7 @@ require('dotenv').config();
 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('render.com')
+    ssl: process.env.DATABASE_URL && (process.env.DATABASE_URL.includes('render.com') || process.env.DATABASE_URL.includes('neon.tech'))
         ? { rejectUnauthorized: false }
         : false
 });
@@ -53,14 +53,14 @@ async function initDB() {
         await client.query(`
             CREATE TABLE IF NOT EXISTS market_state (
                 id INTEGER PRIMARY KEY DEFAULT 1,
-                cours_or NUMERIC DEFAULT 60.00,
+                cours_or NUMERIC NOT NULL,
                 historique_cours JSONB DEFAULT '[]',
                 last_market_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_daily_tick DATE DEFAULT CURRENT_DATE
             );
         `);
 
-        // 4. Catalogue d'acheteurs modifiables à l'infini depuis l'Admin (Particulier, Entreprise, Événement)
+        // 4. Catalogue d'acheteurs (géré en Admin)
         await client.query(`
             CREATE TABLE IF NOT EXISTS clients_catalog (
                 id SERIAL PRIMARY KEY,
@@ -76,7 +76,7 @@ async function initDB() {
             );
         `);
 
-        // 5. Les Clients Acheteurs actifs sur le marché (renouvelés toutes les X heures)
+        // 5. Clients Acheteurs actifs sur le marché
         await client.query(`
             CREATE TABLE IF NOT EXISTS market_clients (
                 id SERIAL PRIMARY KEY,
@@ -90,8 +90,7 @@ async function initDB() {
             );
         `);
 
-
-        // 6. Variables d'équilibrage modifiables à l'infini en Admin
+        // 6. Variables d'équilibrage (gérées en Admin)
         await client.query(`
             CREATE TABLE IF NOT EXISTS game_settings (
                 key VARCHAR(60) PRIMARY KEY,
@@ -130,84 +129,89 @@ async function initDB() {
             );
         `);
 
-        // Peuplement initial du catalogue clients (Particulier, Entreprise, Événementiel)
-        const defaultCatalog = [
-            ['Joaillerie Place Vendôme', 'Entreprise', 'Luxe', 150, 700, 0.02, 0.14, 10],
-            ['Banque Centrale Helvétique', 'Entreprise', 'Réserve d’État', 1000, 3500, -0.04, 0.06, 8],
-            ['Fonderie Industrielle de Lyon', 'Entreprise', 'Industrie', 400, 1500, -0.08, 0.03, 12],
-            ['Aérospatiale & Composants Or', 'Entreprise', 'Haute Tech', 200, 900, 0.00, 0.10, 10],
-            ['Haute Horlogerie de Genève', 'Entreprise', 'Luxe', 150, 750, 0.03, 0.15, 9],
-            ['Collecteur Privé Zurich', 'Particulier', 'Collection privée', 30, 200, 0.05, 0.15, 10],
-            ['Investisseur Patrimonial Paris', 'Particulier', 'Épargne lingotins', 50, 350, 0.02, 0.12, 10],
-            ['Comité Médailles Olympiques', 'Événementiel', 'Commande spéciale', 1500, 5000, 0.06, 0.15, 3],
-            ['Fonds d’Urgence Crise Monétaire', 'Événementiel', 'Spéculation', 2000, 6000, 0.08, 0.15, 2],
-            ['Exposition Universelle Pavillon Or', 'Événementiel', 'Prestige', 800, 2500, 0.05, 0.14, 4]
-        ];
+        // =====================================================================
+        // TABLES V1.1.0 : BOUTIQUE NEUF, BROCANTE/ENCHÈRES & LOCATION
+        // =====================================================================
 
-        for (const [nom, typeClient, secteur, minGr, maxGr, bMin, bMax, poids] of defaultCatalog) {
-            await client.query(
-                `INSERT INTO clients_catalog (nom, type_client, secteur, min_gr, max_gr, bonus_min, bonus_max, poids_apparition)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) ON CONFLICT (nom) DO NOTHING`,
-                [nom, typeClient, secteur, minGr, maxGr, bMin, bMax, poids]
-            );
-        }
-
-        // Insertion des 25 paramètres modifiables à l'infini
-        const defaultSettings = [
-            ['argentDepart', 15000, 'Trésorerie de départ (€)'],
-            ['coursOrInitial', 60, 'Cours initial de l’or (€/g)'],
-            ['coursOrMin', 35, 'Cours plancher de l’or (€/g)'],
-            ['coursOrMax', 120, 'Cours plafond de l’or (€/g)'],
-            ['coutMineur', 800, 'Coût recrutement 1 mineur (€)'],
-            ['salaireMineurJour', 120, 'Salaire quotidien 1 mineur (€/j)'],
-            ['prodMineurTonnes', 2, 'Extraction 1 mineur (tonnes/j)'],
-            ['coutForeuse', 5000, 'Prix achat 1 excavatrice (€)'],
-            ['carburantForeuseJour', 450, 'Carburant quotidien 1 excavatrice (€/j)'],
-            ['prodForeuseTonnes', 15, 'Extraction 1 excavatrice (tonnes/j)'],
-            ['usureParForeuse', 4, 'Usure quotidienne par engin (%)'],
-            ['coutRevision', 1200, 'Coût révision atelier (-25% usure) (€)'],
-            ['coutPanneForcee', 2500, 'Coût réparation panne critique (€)'],
-            ['coutPrime', 1000, 'Coût prime moral (+15% moral) (€)'],
-            ['coutCarottage', 1500, 'Coût carottage géologique (€)'],
-            ['coutDemenagement', 3000, 'Coût déménagement vers parcelle (€)'],
-            ['taxeMiniere', 0.08, 'Redevance minière sur vente (0.08 = 8%)'],
-            ['chanceEvenement', 0.30, 'Probabilité incident quotidien (0.30 = 30%)'],
-            ['heureClotureJour', 3, 'Heure de clôture quotidienne (0-23h)'],
-            ['cycleMarcheHeures', 4, 'Durée cycle clients & bourse (heures)'],
-            ['nbClientsMarche', 10, 'Nombre de clients générés par cycle'],
-            ['margeNegociationMax', 0.15, 'Marge négociation max (0.15 = +/- 15%)'],
-            ['coutUniteMarketing', 1000, 'Coût +10 pts campagne marketing (€)'],
-            ['usureMarketingJour', 0.10, 'Perte notoriété quotidienne (0.10 = 10%)'],
-            ['seuilEtudeMarche', 25, 'Points marketing requis pour étude de marché']
-        ];
-
-        for (const [key, value, label] of defaultSettings) {
-            await client.query(
-                `INSERT INTO game_settings (key, value, label) VALUES ($1, $2, $3) ON CONFLICT (key) DO NOTHING`,
-                [key, value, label]
-            );
-        }
-
-        // Initialisation de la Bourse mondiale
+        // 9. Catalogue des engins neufs (géré en Admin)
         await client.query(`
-            INSERT INTO market_state (id, cours_or, historique_cours)
-            VALUES (1, 60.00, '[{"label":"Init","cours":60}]')
-            ON CONFLICT (id) DO NOTHING
+            CREATE TABLE IF NOT EXISTS equipment_catalog (
+                id SERIAL PRIMARY KEY,
+                nom VARCHAR(100) UNIQUE NOT NULL,
+                categorie VARCHAR(50) NOT NULL,
+                prix_neuf NUMERIC NOT NULL,
+                prod_tonnes NUMERIC NOT NULL,
+                carburant_jour NUMERIC NOT NULL,
+                usure_jour NUMERIC NOT NULL,
+                actif BOOLEAN DEFAULT TRUE
+            );
         `);
 
-        // Texte d'accueil par défaut
+        // 10. Flotte individuelle de chaque PDG
         await client.query(`
-            INSERT INTO site_texts (key, title, content)
-            VALUES ('welcome', 'Devenez le magnat de l’extraction aurifère',
-            'Prospectez vos concessions à ciel ouvert, gérez vos équipes et vos excavatrices, investissez dans votre marketing face aux autres PDG et négociez vos lingots au meilleur prix auprès des acheteurs internationaux.')
-            ON CONFLICT (key) DO NOTHING
+            CREATE TABLE IF NOT EXISTS player_fleet (
+                id SERIAL PRIMARY KEY,
+                owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                catalog_id INTEGER REFERENCES equipment_catalog(id),
+                nom VARCHAR(100) NOT NULL,
+                categorie VARCHAR(50) NOT NULL,
+                prod_tonnes NUMERIC NOT NULL,
+                carburant_jour NUMERIC NOT NULL,
+                usure_jour NUMERIC NOT NULL,
+                usure_actuelle NUMERIC DEFAULT 0,
+                statut VARCHAR(30) DEFAULT 'ACTIF',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
         `);
+
+        // 11. Brocante & Enchères entre PDG
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS market_auctions (
+                id SERIAL PRIMARY KEY,
+                fleet_id INTEGER REFERENCES player_fleet(id) ON DELETE CASCADE,
+                seller_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                mode_vente VARCHAR(20) NOT NULL,
+                prix_depart NUMERIC NOT NULL,
+                prix_actuel NUMERIC NOT NULL,
+                highest_bidder_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                expires_at TIMESTAMP NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 12. Offres et Contrats de Location (Parc officiel + entre PDG)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS active_rentals (
+                id SERIAL PRIMARY KEY,
+                source_type VARCHAR(20) NOT NULL,
+                fleet_id INTEGER REFERENCES player_fleet(id) ON DELETE CASCADE,
+                catalog_id INTEGER REFERENCES equipment_catalog(id),
+                owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                renter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                nom VARCHAR(100) NOT NULL,
+                categorie VARCHAR(50) NOT NULL,
+                prod_tonnes NUMERIC NOT NULL,
+                carburant_jour NUMERIC NOT NULL,
+                usure_jour NUMERIC NOT NULL,
+                loyer_jour NUMERIC NOT NULL,
+                jours_restants INTEGER NOT NULL,
+                statut VARCHAR(20) DEFAULT 'DISPONIBLE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // Vérification stricte que la base est bien configurée (sinon -> mode maintenance)
+        const checkSettings = await client.query('SELECT COUNT(*) FROM game_settings');
+        if (parseInt(checkSettings.rows.at(0).count) === 0) {
+            throw new Error('Base de données non configurée : table game_settings vide.');
+        }
 
         await client.query('COMMIT');
-        console.log('✅ Base de données PostgreSQL V2 (avec catalogue clients en table) initialisée.');
+        console.log('✅ Structure PostgreSQL V1.1.0 vérifiée avec succès.');
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('❌ Erreur initialisation DB :', err);
+        console.error('❌ Erreur initialisation DB (basculer en maintenance) :', err.message);
+        throw err;
     } finally {
         client.release();
     }

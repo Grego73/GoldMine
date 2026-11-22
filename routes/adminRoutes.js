@@ -50,21 +50,60 @@ router.post('/toggle-ban', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// 2. VARIABLES D'ÉQUILIBRAGE (25 PARAMÈTRES)
+// 2. VARIABLES D'ÉQUILIBRAGE (LECTURE, MODIFICATION & CRÉATION DIRECTE)
 router.get('/settings', requireAdmin, async (req, res) => {
     const result = await pool.query('SELECT * FROM game_settings ORDER BY key ASC');
     res.json(result.rows);
 });
 
 router.post('/settings', requireAdmin, async (req, res) => {
-    const { key, value } = req.body;
-    await pool.query('UPDATE game_settings SET value = $1 WHERE key = $2', [parseFloat(value), key]);
+    const { key, value, label } = req.body;
+    if (!key || value === undefined) return res.status(400).json({ error: 'Clé et valeur requises' });
+
+    if (label && label.trim() !== '') {
+        await pool.query(
+            `INSERT INTO game_settings (key, value, label) VALUES ($1, $2, $3)
+             ON CONFLICT (key) DO UPDATE SET value = $2, label = $3`,
+            [key.trim(), parseFloat(value), label.trim()]
+        );
+        await logAdmin(req.adminUsername, `Création/MAJ variable [${key}] = ${value} (${label})`);
+    } else {
+        await pool.query('UPDATE game_settings SET value = $1 WHERE key = $2', [parseFloat(value), key.trim()]);
+        await logAdmin(req.adminUsername, `Modification variable [${key}] = ${value}`);
+    }
+
     await loadGameConfig();
-    await logAdmin(req.adminUsername, `Modification variable [${key}] = ${value}`);
     res.json({ success: true });
 });
 
-// 3. GESTION DU CATALOGUE CLIENTS (Particulier, Entreprise, Événementiel)
+// 3. GESTION DU CATALOGUE DES ENGINS NEUFS (BOUTIQUE & LOCATION)
+router.get('/equipment-catalog', requireAdmin, async (req, res) => {
+    const result = await pool.query('SELECT * FROM equipment_catalog ORDER BY prix_neuf ASC');
+    res.json(result.rows);
+});
+
+router.post('/equipment-catalog', requireAdmin, async (req, res) => {
+    const { nom, categorie, prix_neuf, prod_tonnes, carburant_jour, usure_jour } = req.body;
+    if (!nom || !categorie) return res.status(400).json({ error: 'Nom et catégorie requis' });
+
+    await pool.query(
+        `INSERT INTO equipment_catalog (nom, categorie, prix_neuf, prod_tonnes, carburant_jour, usure_jour, actif)
+         VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+         ON CONFLICT (nom) DO UPDATE SET
+         categorie = $2, prix_neuf = $3, prod_tonnes = $4, carburant_jour = $5, usure_jour = $6, actif = TRUE`,
+        [nom.trim(), categorie.trim(), parseFloat(prix_neuf), parseFloat(prod_tonnes), parseFloat(carburant_jour), parseFloat(usure_jour)]
+    );
+    await logAdmin(req.adminUsername, `Ajout/MAJ engin catalogue : ${nom} (${prix_neuf} €)`);
+    res.json({ success: true });
+});
+
+router.delete('/equipment-catalog/:id', requireAdmin, async (req, res) => {
+    await pool.query('DELETE FROM equipment_catalog WHERE id = $1', [req.params.id]);
+    await logAdmin(req.adminUsername, `Suppression engin catalogue #${req.params.id}`);
+    res.json({ success: true });
+});
+
+// 4. GESTION DU CATALOGUE CLIENTS
 router.get('/clients-catalog', requireAdmin, async (req, res) => {
     const result = await pool.query('SELECT * FROM clients_catalog ORDER BY type_client ASC, nom ASC');
     res.json(result.rows);
@@ -96,7 +135,7 @@ router.delete('/clients-catalog/:id', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// 4. TEXTES DU SITE
+// 5. TEXTES DU SITE
 router.get('/texts', requireAdmin, async (req, res) => {
     const result = await pool.query('SELECT * FROM site_texts ORDER BY key ASC');
     res.json(result.rows);
@@ -109,7 +148,7 @@ router.post('/texts', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
-// 5. LOGS JOUEURS & LOGS ADMIN
+// 6. LOGS JOUEURS & LOGS ADMIN
 router.get('/player-logs', requireAdmin, async (req, res) => {
     const username = req.query.username || '';
     const result = username

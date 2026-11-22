@@ -3,248 +3,239 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gold Mine - Exploitation & Négoce</title>
-    <link rel="stylesheet" href="css/style.css">
+    <title>Gold Mine — Quartier Général PDG</title>
+    <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-    <div class="ui menu mine-nav">
-        <div class="header item">⛏️ GOLD MINE</div>
-        <a class="active item" onclick="changerOnglet('qg', this)">📊 Quartier Général</a>
-        <a class="item" onclick="changerOnglet('parc', this)">🚜 Fosse & Engins</a>
-        <a class="item" onclick="changerOnglet('concessions', this)">🗺️ Concessions</a>
-        <a class="item" onclick="changerOnglet('bourse', this)">💰 Clients & Marketing</a>
-        <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
-
-        <div class="right menu">
-            <a id="link-tchatgc-game" href="#" target="_blank" class="item">💬 Aide</a>
-            <a id="btn-admin-link" href="/admin.html" class="item" style="display: none; color: #fbbf24;">🛡️ Admin</a>
-            <span id="countdown-cloture" class="ui yellow label" title="Prochaine clôture automatique du chantier">⏳ Clôture : --:--</span>
-            <a onclick="deconnexion()" class="item" title="Déconnexion">🚪</a>
-        </div>
+<div class="ui menu mine-nav">
+    <div class="header item">⛏️ GOLD MINE</div>
+    <a class="item active" id="nav-mine" onclick="changerOnglet('tab-mine', this)">🏭 Fosse & Équipe</a>
+    <a class="item" id="nav-materiel" onclick="changerOnglet('tab-materiel', this); chargerModuleMateriel();">🚜 Matériel & Marché</a>
+    <a class="item" id="nav-prospection" onclick="changerOnglet('tab-prospection', this)">🗺️ Prospection</a>
+    <a class="item" id="nav-marche" onclick="changerOnglet('tab-marche', this)">📈 Bourse & Clients</a>
+    <a class="item" id="nav-classement" onclick="changerOnglet('tab-classement', this)">🏆 Classement</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label"></span>
+        <a href="/admin.html" id="btn-admin-panel" class="ui orange mini button" style="display:none;">🛡️ Admin</a>
+        <a class="item" onclick="deconnexion()">🚪 Déconnexion</a>
     </div>
+</div>
 
-    <div class="status-bar">
-        <div class="ui container" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
-            <div class="status-item">👤 <strong>PDG : <span id="stat-username">...</span></strong></div>
-            <div class="status-item">💶 Trésorerie : <span id="stat-argent" class="money-text">0 €</span></div>
-            <div class="status-item">🪙 Stock Or : <span id="stat-stock" class="gold-text">0 g</span></div>
-            <div class="status-item">📈 Cours Mondial : <span id="stat-cours" class="gold-text">60.00 €/g</span></div>
-            <div class="status-item">📣 Notoriété Mkt : <span id="stat-mkt" class="ui blue label">10 pts</span></div>
-            <div class="status-item">📅 Jour <strong id="stat-jour">1</strong></div>
-            <div class="status-item">
-                <span id="save-indicator" class="ui green label">💾 Temps réel</span>
+<div class="status-bar">
+    <div class="ui container" style="display:flex; flex-wrap:wrap; justify-content:space-between; gap:15px;">
+        <span class="status-item">👤 PDG : <strong id="stat-username" style="color:#fbbf24;">---</strong></span>
+        <span class="status-item">📅 Jour : <strong id="stat-jour">1</strong></span>
+        <span class="status-item">💶 Trésorerie : <span id="stat-argent" class="money-text">0 €</span></span>
+        <span class="status-item">🪙 Stock Or : <span id="stat-or" class="gold-text">0 g</span></span>
+        <span class="status-item">📊 Cours Mondial : <span id="stat-cours" class="gold-text">60.00 €/g</span></span>
+    </div>
+</div>
+
+<div class="ui container">
+    <div id="game-notif" class="ui message" style="display:none;"></div>
+
+    <!-- ONGLET 1 : FOSSE & ÉQUIPE -->
+    <div id="tab-mine" class="game-tab">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">📊 Indicateurs de l'Exploitation</h3>
+            <div class="ui statistics">
+                <div class="statistic"><div class="value" id="kpi-mineurs">0</div><div class="label">Mineurs</div></div>
+                <div class="statistic"><div class="value" id="kpi-foreuses">0</div><div class="label">Engins Flotte</div></div>
+                <div class="statistic"><div class="value" id="kpi-moral">80%</div><div class="label">Moral Équipe</div></div>
+                <div class="statistic"><div class="value" id="kpi-usure">0%</div><div class="label">Usure Moyenne</div></div>
+                <div class="statistic"><div class="value" id="kpi-marketing">10</div><div class="label">Notoriété</div></div>
             </div>
         </div>
-    </div>
 
-    <div class="ui container">
-        <div id="game-toast" class="ui message" style="display: none;"></div>
-
-        <!-- ONGLET 1 : QUARTIER GÉNÉRAL -->
-        <div id="tab-qg" class="tab-section">
+        <div class="ui two column grid">
             <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header">📋 Indicateurs de l'Exploitation</h3>
-                <div class="ui statistics">
-                    <div class="statistic">
-                        <div id="kpi-reserve" class="value">1 000 t</div>
-                        <div class="label">Réserve Fosse</div>
-                    </div>
-                    <div class="statistic">
-                        <div id="kpi-purete" class="value">5.0 g/t</div>
-                        <div class="label">Teneur en Or</div>
-                    </div>
-                    <div class="statistic">
-                        <div id="kpi-engins" class="value">1</div>
-                        <div class="label">Excavatrices</div>
-                    </div>
-                    <div class="statistic">
-                        <div id="kpi-moral" class="value">80%</div>
-                        <div class="label">Moral Équipes</div>
-                    </div>
-                    <div class="statistic">
-                        <div id="kpi-usure" class="value">0%</div>
-                        <div class="label">Usure Parc</div>
+                <h3 class="ui dividing header mine-header">⚙️ Pilotage & Ressources Humaines</h3>
+                <div class="ui form">
+                    <div class="field">
+                        <label>Cadence d'extraction (Clôture chaque nuit à 3h00)</label>
+                        <select id="select-cadence" onchange="changerCadence()">
+                            <option value="0.7">🟢 Économique (0.7x — Préserve moral et matériel)</option>
+                            <option value="1.0" selected>🟡 Normale (1.0x — Rythme standard)</option>
+                            <option value="1.4">🔴 Intensive (1.4x — Forte production, risque grève/usure)</option>
+                        </select>
                     </div>
                 </div>
-            </div>
-
-            <div class="ui two column grid">
-                <div class="column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header">👷 Direction des Opérations</h3>
-                        <p id="conseil-assistante" style="color: #d6d3d1; font-style: italic; margin-bottom: 10px;">
-                            Analyse du chantier en cours...
-                        </p>
-                        <div class="ui inverted segment">
-                            <strong>Clôture automatique :</strong> Chaque nuit à <span id="info-heure-cloture" class="gold-text">3h00</span>, vos équipes extraient le minerai selon vos réglages (effectifs, engins et cadence).
-                        </div>
-                    </div>
+                <div class="ui two buttons" style="margin-top:15px;">
+                    <button class="ui green button" onclick="actionMine('/api/game/hire')">👷 Recruter Mineur</button>
+                    <button class="ui yellow button" onclick="actionMine('/api/game/bonus')">🎉 Prime Moral (+15%)</button>
                 </div>
-
-                <div class="column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header">📈 Évolution du Cours Mondial (€/g)</h3>
-                        <canvas id="chartCoursOr" height="140"></canvas>
-                    </div>
+                <div style="margin-top:12px;">
+                    <button class="ui fluid blue button" onclick="changerOnglet('tab-materiel', document.getElementById('nav-materiel')); chargerModuleMateriel();">
+                        🚜 Gérer mes engins dans Matériel & Marché
+                    </button>
                 </div>
             </div>
 
             <div class="ui segment mine-card">
                 <h3 class="ui dividing header mine-header">📻 Journal Radio & Rapports de Clôture</h3>
-                <div id="journal-log"></div>
+                <div id="journal-log">Connexion à la radio de la mine...</div>
             </div>
         </div>
+    </div>
 
-        <!-- ONGLET 2 : FOSSE & ENGINS -->
-        <div id="tab-parc" class="tab-section" style="display: none;">
-            <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header">⚙️ Parc Matériel, Équipes & Cadence</h3>
-                <div class="ui three column grid">
-                    <div class="column">
-                        <div class="ui inverted segment">
-                            <h4 style="color: #fbbf24; margin-bottom: 6px;">👷 Équipe d'Extraction</h4>
-                            <p>Opérateurs actifs : <strong id="exp-mineurs">5</strong></p>
-                            <p id="desc-mineur" style="color: #a8a29e; font-size: 0.88em; margin: 6px 0;"></p>
-                            <button id="btn-embaucher" onclick="actionMine('embaucher')" class="ui fluid green button">Recruter</button>
-                        </div>
-                    </div>
-
-                    <div class="column">
-                        <div class="ui inverted segment">
-                            <h4 style="color: #fbbf24; margin-bottom: 6px;">🚜 Excavatrices</h4>
-                            <p>Engins en service : <strong id="exp-foreuses">1</strong></p>
-                            <p id="desc-foreuse" style="color: #a8a29e; font-size: 0.88em; margin: 6px 0;"></p>
-                            <button id="btn-foreuse" onclick="actionMine('foreuse')" class="ui fluid yellow button">Acheter Engin</button>
-                        </div>
-                    </div>
-
-                    <div class="column">
-                        <div class="ui inverted segment">
-                            <h4 style="color: #fbbf24; margin-bottom: 6px;">🔧 Atelier & Cadence (3h00)</h4>
-                            <p>Usure actuelle : <strong id="exp-usure">0%</strong></p>
-                            <div class="ui form" style="margin: 8px 0;">
-                                <select id="cadence" onchange="actionMine('cadence', this.value)">
-                                    <option value="0.8">Cadence Économique (80% / +Moral)</option>
-                                    <option value="1">Cadence Normale (100%)</option>
-                                    <option value="1.25">Cadence Intensive (125% / +Usure)</option>
-                                </select>
-                            </div>
-                            <div class="ui two buttons">
-                                <button id="btn-reparer" onclick="actionMine('reparer')" class="ui orange button">Réviser</button>
-                                <button id="btn-prime" onclick="actionMine('prime')" class="ui blue button">Prime</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- ONGLET 3 : CONCESSIONS -->
-        <div id="tab-concessions" class="tab-section" style="display: none;">
-            <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header">🗺️ Cadastre Minier & Prospection Géologique</h3>
-                <p id="desc-prospection" style="color: #d6d3d1;"></p>
-                <div id="mapGrid" class="pit-grid"></div>
-            </div>
-        </div>
-
-        <!-- ONGLET 4 : CLIENTS & MARKETING -->
-        <div id="tab-bourse" class="tab-section" style="display: none;">
-            <div class="ui two column grid">
-                <div class="column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header">📣 Service Commercial & Étude Marketing</h3>
-                        <p style="color: #d6d3d1; margin-bottom: 8px;">
-                            Votre notoriété détermine votre capacité à vendre cher (jusqu'à <strong class="gold-text">+15%</strong>) face aux autres PDG.
-                        </p>
-                        <div class="ui inverted segment" style="margin-bottom: 10px;">
-                            <div>Votre Notoriété : <strong id="mkt-my" class="gold-text">10 pts</strong> | Moyenne secteur : <strong id="mkt-avg">10 pts</strong> | Leader : <strong id="mkt-max">10 pts</strong></div>
-                            <div style="margin-top: 4px;">Compétitivité : <strong id="mkt-ratio" class="money-text">1.00x</strong> — Étude de marché : <span id="mkt-etude-statut">Verrouillée</span></div>
-                        </div>
-                        <button id="btn-marketing" onclick="actionMine('marketing')" class="ui fluid blue button">
-                            Lancer une campagne marketing (+10 pts)
-                        </button>
-                    </div>
-                </div>
-
-                <div class="column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header">🔐 Coffre-fort & Négociation Active</h3>
-                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span>Stock disponible : <strong id="coffre-grammes" class="gold-text" style="font-size: 1.3em;">0 g</strong></span>
-                            <span id="desc-taxe" style="color: #a8a29e; font-size: 0.85em;"></span>
-                        </div>
-                        <div class="ui inverted segment">
-                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
-                                <label>Marge de négociation : <strong id="negoc-marge-label" class="gold-text">0%</strong></label>
-                                <span style="font-size: 0.85em; color: #a8a29e;">(-15% = vente facile | +15% = marge max)</span>
-                            </div>
-                            <input type="range" id="negoc-marge" min="-15" max="15" value="0" step="1" style="width: 100%;" oninput="majSliderMarge()">
-                        </div>
-                    </div>
-                </div>
+    <!-- ONGLET 2 : MATÉRIEL & MARCHÉ (BOUTIQUE, BROCANTE/ENCHÈRES, LOCATION) -->
+    <div id="tab-materiel" class="game-tab" style="display:none;">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🚜 Parc Matériel, Brocante & Location</h3>
+            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
+                <button class="ui yellow button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-flotte', this)">🛠️ Ma Flotte & Contrats</button>
+                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-boutique', this)">🏪 Boutique Neuf (0% Usure)</button>
+                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-brocante', this)">🔨 Brocante & Enchères</button>
+                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-location', this)">🤝 Location d'Engins</button>
             </div>
 
-            <div class="ui segment mine-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                    <h3 class="ui header mine-header" style="margin: 0; border: none; padding: 0;">🤝 Carnet de Commandes Clients (Renouvelé toutes les <span id="info-cycle-heures">4</span>h)</h3>
-                    <span id="countdown-marche" class="ui blue label">Prochain renouvellement : --:--</span>
-                </div>
-                <div style="overflow-x: auto;">
-                    <table class="ui table">
-                        <thead>
-                            <tr>
-                                <th>Acheteur</th>
-                                <th>Type</th>
-                                <th>Secteur</th>
-                                <th>Demande</th>
-                                <th>Prix Base</th>
-                                <th>Votre Offre</th>
-                                <th>Étude Marché</th>
-                                <th>Vendre (g)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="clients-list"></tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-
-        <!-- ONGLET 5 : CLASSEMENT -->
-        <div id="tab-classement" class="tab-section" style="display: none;">
-            <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header">🏆 Classement des Compagnies Minières</h3>
+            <!-- SOUS-ONGLET A : MA FLOTTE -->
+            <div id="sub-flotte" class="eq-subtab">
+                <h4 style="color:#fbbf24; margin-bottom:10px;">Mes Engins en Propriété</h4>
                 <table class="ui table">
                     <thead>
                         <tr>
-                            <th>Rang</th>
-                            <th>PDG</th>
-                            <th>Jour</th>
-                            <th>Trésorerie</th>
-                            <th>Stock Or</th>
-                            <th>Engins</th>
-                            <th>Notoriété Mkt</th>
+                            <th>Engin</th>
+                            <th>Rendement</th>
+                            <th>Carburant</th>
+                            <th>Usure</th>
+                            <th>Statut</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody id="ranking-list"></tbody>
+                    <tbody id="eq-my-fleet-tbody"></tbody>
+                </table>
+
+                <h4 style="color:#fbbf24; margin-top:24px; margin-bottom:10px;">Engins Loués en Cours d'Exploitation</h4>
+                <table class="ui table">
+                    <thead>
+                        <tr>
+                            <th>Engin Loué</th>
+                            <th>Rendement</th>
+                            <th>Carburant</th>
+                            <th>Loyer / Jour</th>
+                            <th>Durée Restante</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eq-my-rentals-tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- SOUS-ONGLET B : BOUTIQUE NEUF -->
+            <div id="sub-boutique" class="eq-subtab" style="display:none;">
+                <p style="color:#d6d3d1; margin-bottom:14px;">Matériel neuf garanti <strong>0 % d'usure</strong> à la livraison. Opérationnel immédiatement pour la prochaine clôture.</p>
+                <div id="eq-shop-new-grid" class="ui three column grid"></div>
+            </div>
+
+            <!-- SOUS-ONGLET C : BROCANTE & ENCHÈRES -->
+            <div id="sub-brocante" class="eq-subtab" style="display:none;">
+                <p style="color:#d6d3d1; margin-bottom:14px;">Achetez du matériel d'occasion en vente directe ou remportez des enchères lancées par les autres PDG (jusqu'à 7 jours).</p>
+                <table class="ui table">
+                    <thead>
+                        <tr>
+                            <th>Engin & État</th>
+                            <th>Specs</th>
+                            <th>Type</th>
+                            <th>Prix / Enchère</th>
+                            <th>Fin</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eq-auctions-tbody"></tbody>
+                </table>
+            </div>
+
+            <!-- SOUS-ONGLET D : LOCATION D'ENGINS -->
+            <div id="sub-location" class="eq-subtab" style="display:none;">
+                <h4 style="color:#fbbf24; margin-bottom:8px;">🏢 Parc de Location Officiel (1 à 7 jours)</h4>
+                <table class="ui table" style="margin-bottom:24px;">
+                    <thead>
+                        <tr>
+                            <th>Modèle</th>
+                            <th>Rendement</th>
+                            <th>Carburant/j</th>
+                            <th>Loyer Estimé</th>
+                            <th>Durée & Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eq-official-rentals-tbody"></tbody>
+                </table>
+
+                <h4 style="color:#fbbf24; margin-bottom:8px;">🤝 Offres de Location entre PDG</h4>
+                <table class="ui table">
+                    <thead>
+                        <tr>
+                            <th>Engin & Propriétaire</th>
+                            <th>Rendement</th>
+                            <th>Carburant/j</th>
+                            <th>Loyer / Jour</th>
+                            <th>Durée Contrat</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="eq-pdg-rentals-tbody"></tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- MODALE INCIDENTS QUOTIDIENS -->
-    <div id="eventModal" class="modal-overlay">
-        <div class="modal-box">
-            <div id="eventTitle" class="modal-header">⚠️ Incident sur le chantier</div>
-            <div class="modal-content">
-                <p id="eventDesc"></p>
-            </div>
-            <div id="eventChoices" class="modal-actions"></div>
+    <!-- ONGLET 3 : PROSPECTION -->
+    <div id="tab-prospection" class="game-tab" style="display:none;">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🗺️ Cadastre des 12 Concessions</h3>
+            <p style="color:#d6d3d1;">Parcelle active : <strong id="active-parcel-name" style="color:#34d399;">Secteur A</strong></p>
+            <div id="pit-grid" class="pit-grid"></div>
         </div>
     </div>
 
-    <script src="js/version.js"></script>
-    <script src="js/main.js"></script>
+    <div id="tab-marche" class="game-tab" style="display:none;">
+        <div class="ui two column grid">
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">📈 Cours Mondial de l'Or</h3>
+                <canvas id="gold-chart" width="520" height="220" style="width:100%; background:#141210; border-radius:8px; border:1px solid #44403c;"></canvas>
+                <div style="margin-top:14px; display:flex; justify-content:space-between; align-items:center;">
+                    <span><strong id="countdown-marche" style="color:#fbbf24;">Renouvellement dans --h--</strong></span>
+                    <button class="ui orange button" onclick="actionMine('/api/game/marketing')">📣 Campagne Marketing (+10 pts)</button>
+                </div>
+            </div>
+
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">🤝 Acheteurs Internationaux</h3>
+                <div id="market-clients-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="tab-classement" class="game-tab" style="display:none;">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🏆 Classement des Compagnies Minières</h3>
+            <table class="ui table">
+                <thead>
+                    <tr>
+                        <th>Rang</th>
+                        <th>PDG</th>
+                        <th>Jour</th>
+                        <th>Notoriété</th>
+                        <th>Valeur Totale Estimée</th>
+                    </tr>
+                </thead>
+                <tbody id="leaderboard-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div id="event-modal" class="modal-overlay">
+    <div class="modal-box">
+        <div class="modal-header" id="event-modal-title">⚠️ Incident sur la Mine</div>
+        <div class="modal-content" id="event-modal-desc"></div>
+        <div class="modal-actions" id="event-modal-actions"></div>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script src="/js/main.js"></script>
+<script src="/js/equipment.js"></script>
 </body>
 </html>
