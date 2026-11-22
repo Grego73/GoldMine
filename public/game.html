@@ -3,80 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gold Mine - Exploitation à Ciel Ouvert</title>
+    <title>Gold Mine - Exploitation & Négoce</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <!-- Menu principal -->
-    <div class="ui inverted stackable menu mine-nav">
-        <div class="header item">
-            <i class="gem yellow icon"></i> GOLD MINE
-        </div>
-        <a class="active item" onclick="changerOnglet('qg', this)"><i class="tachometer alternate icon"></i> Quartier Général</a>
-        <a class="item" onclick="changerOnglet('parc', this)"><i class="truck icon"></i> Fosse & Engins</a>
-        <a class="item" onclick="changerOnglet('concessions', this)"><i class="map marked alternate icon"></i> Concessions</a>
-        <a class="item" onclick="changerOnglet('bourse', this)"><i class="balance scale icon"></i> Coffre & Bourse</a>
-        <a class="item" onclick="changerOnglet('classement', this); chargerClassement();"><i class="trophy icon"></i> Classement</a>
+    <div class="ui menu mine-nav">
+        <div class="header item">⛏️ GOLD MINE</div>
+        <a class="active item" onclick="changerOnglet('qg', this)">📊 Quartier Général</a>
+        <a class="item" onclick="changerOnglet('parc', this)">🚜 Fosse & Engins</a>
+        <a class="item" onclick="changerOnglet('concessions', this)">🗺️ Concessions</a>
+        <a class="item" onclick="changerOnglet('bourse', this)">💰 Clients & Marketing</a>
+        <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
 
         <div class="right menu">
-            <a id="link-tchatgc-game" href="#" target="_blank" class="item"><i class="comments icon"></i> Aide</a>
-            <a id="btn-admin-link" href="/admin.html" class="item" style="display: none; color: #fbbf24;">
-                <i class="shield alternate icon"></i> Admin
-            </a>
-            <div class="item">
-                <button onclick="jourSuivant()" class="ui yellow button">
-                    <i class="forward icon"></i> Jour Suivant
-                </button>
-            </div>
-            <a onclick="deconnexion()" class="item" title="Déconnexion"><i class="power off red icon"></i></a>
+            <a id="link-tchatgc-game" href="#" target="_blank" class="item">💬 Aide</a>
+            <a id="btn-admin-link" href="/admin.html" class="item" style="display: none; color: #fbbf24;">🛡️ Admin</a>
+            <span id="countdown-cloture" class="ui yellow label" title="Prochaine clôture automatique du chantier">⏳ Clôture : --:--</span>
+            <a onclick="deconnexion()" class="item" title="Déconnexion">🚪</a>
         </div>
     </div>
 
-    <!-- Barre de statut du PDG -->
     <div class="status-bar">
-        <div class="ui container" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 15px;">
-            <div class="status-item"><i class="user tie yellow icon"></i> <strong>PDG : <span id="stat-username">...</span></strong></div>
-            <div class="status-item"><i class="euro sign green icon"></i> Trésorerie : <span id="stat-argent" class="money-text">0 €</span></div>
-            <div class="status-item"><i class="cubes yellow icon"></i> Stock Or : <span id="stat-stock" class="gold-text">0 g</span></div>
-            <div class="status-item"><i class="chart line yellow icon"></i> Cours Au : <span id="stat-cours" class="gold-text">60.00 €/g</span></div>
-            <div class="status-item"><i class="calendar alternate icon"></i> Jour <strong id="stat-jour">1</strong></div>
+        <div class="ui container" style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px;">
+            <div class="status-item">👤 <strong>PDG : <span id="stat-username">...</span></strong></div>
+            <div class="status-item">💶 Trésorerie : <span id="stat-argent" class="money-text">0 €</span></div>
+            <div class="status-item">🪙 Stock Or : <span id="stat-stock" class="gold-text">0 g</span></div>
+            <div class="status-item">📈 Cours Mondial : <span id="stat-cours" class="gold-text">60.00 €/g</span></div>
+            <div class="status-item">📣 Notoriété Mkt : <span id="stat-mkt" class="ui blue label">10 pts</span></div>
+            <div class="status-item">📅 Jour <strong id="stat-jour">1</strong></div>
             <div class="status-item">
-                <span id="save-indicator" class="ui green mini label"><i class="database icon"></i> Synchronisé</span>
-                <span class="ui grey mini label app-version" style="margin-left: 5px;">v1.0.0</span>
+                <span id="save-indicator" class="ui green label">💾 Temps réel</span>
+                <span class="ui label app-version">v2.0.0</span>
             </div>
         </div>
     </div>
 
     <div class="ui container">
+        <div id="game-toast" class="ui message" style="display: none;"></div>
 
         <!-- ONGLET 1 : QUARTIER GÉNÉRAL -->
         <div id="tab-qg" class="tab-section">
-            <div class="ui stackable two column grid">
-                <div class="eight wide column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header"><i class="hard hat icon"></i> Votre géologue en chef</h3>
-                        <p style="color: #fbbf24; font-weight: bold; margin-bottom: 2px;">Nadège — Directrice des Opérations</p>
-                        <small style="color: #a8a29e;">Analyse en temps réel</small>
-                        <div class="ui inverted segment" style="background: #1c1917; border-left: 3px solid #fbbf24; margin-top: 12px;">
-                            <p id="conseil-assistante" style="font-style: italic; color: #e7e5e4;">
-                                « Bienvenue sur votre site à ciel ouvert, Patron ! »
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="eight wide column">
-                    <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header"><i class="chart area icon"></i> Votre empire (Trésorerie)</h3>
-                        <canvas id="chartPatrimoine" height="120"></canvas>
-                    </div>
-                </div>
-            </div>
-
             <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header"><i class="clipboard list icon"></i> Quelques chiffres de l'exploitation</h3>
-                <div class="ui five tiny statistics">
+                <h3 class="ui dividing header mine-header">📋 Indicateurs de l'Exploitation</h3>
+                <div class="ui statistics">
                     <div class="statistic">
                         <div id="kpi-reserve" class="value">1 000 t</div>
                         <div class="label">Réserve Fosse</div>
@@ -100,59 +70,73 @@
                 </div>
             </div>
 
-            <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header"><i class="broadcast tower icon"></i> Radio du Chantier & Rapports</h3>
-                <div id="journal-log">
-                    <div>Liaison radio établie avec la fosse à ciel ouvert.</div>
+            <div class="ui two column grid">
+                <div class="column">
+                    <div class="ui segment mine-card">
+                        <h3 class="ui dividing header mine-header">👷 Direction des Opérations</h3>
+                        <p id="conseil-assistante" style="color: #d6d3d1; font-style: italic; margin-bottom: 10px;">
+                            Analyse du chantier en cours...
+                        </p>
+                        <div class="ui inverted segment">
+                            <strong>Clôture automatique :</strong> Chaque nuit à <span id="info-heure-cloture" class="gold-text">3h00</span>, vos équipes extraient le minerai selon vos réglages (effectifs, engins et cadence).
+                        </div>
+                    </div>
                 </div>
+
+                <div class="column">
+                    <div class="ui segment mine-card">
+                        <h3 class="ui dividing header mine-header">📈 Évolution du Cours Mondial (€/g)</h3>
+                        <canvas id="chartCoursOr" height="140"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">📻 Journal Radio & Rapports de Clôture</h3>
+                <div id="journal-log"></div>
             </div>
         </div>
 
         <!-- ONGLET 2 : FOSSE & ENGINS -->
         <div id="tab-parc" class="tab-section" style="display: none;">
             <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header"><i class="cogs icon"></i> Parc Matériel & Ressources Humaines</h3>
-                <div class="ui three column stackable grid">
-                    
+                <h3 class="ui dividing header mine-header">⚙️ Parc Matériel, Équipes & Cadence</h3>
+                <div class="ui three column grid">
                     <div class="column">
-                        <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
-                            <h4 class="ui yellow header">👷 Équipe d'Extraction</h4>
-                            <p>Opérateurs : <strong id="exp-mineurs">5</strong></p>
-                            <p id="desc-mineur" style="color: #a8a29e; font-size: 0.9em;">Extrait du minerai chaque jour.</p>
-                            <button id="btn-embaucher" onclick="embaucher()" class="ui fluid green button">Recruter</button>
+                        <div class="ui inverted segment">
+                            <h4 style="color: #fbbf24; margin-bottom: 6px;">👷 Équipe d'Extraction</h4>
+                            <p>Opérateurs actifs : <strong id="exp-mineurs">5</strong></p>
+                            <p id="desc-mineur" style="color: #a8a29e; font-size: 0.88em; margin: 6px 0;"></p>
+                            <button id="btn-embaucher" onclick="actionMine('embaucher')" class="ui fluid green button">Recruter</button>
                         </div>
                     </div>
 
                     <div class="column">
-                        <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
-                            <h4 class="ui yellow header">🚜 Excavatrice & Tombereau</h4>
-                            <p>Engins actifs : <strong id="exp-foreuses">1</strong></p>
-                            <p id="desc-foreuse" style="color: #a8a29e; font-size: 0.9em;">Extraction massive en fosse.</p>
-                            <button id="btn-foreuse" onclick="acheterForeuse()" class="ui fluid yellow button">Acheter Engin</button>
+                        <div class="ui inverted segment">
+                            <h4 style="color: #fbbf24; margin-bottom: 6px;">🚜 Excavatrices</h4>
+                            <p>Engins en service : <strong id="exp-foreuses">1</strong></p>
+                            <p id="desc-foreuse" style="color: #a8a29e; font-size: 0.88em; margin: 6px 0;"></p>
+                            <button id="btn-foreuse" onclick="actionMine('foreuse')" class="ui fluid yellow button">Acheter Engin</button>
                         </div>
                     </div>
 
                     <div class="column">
-                        <div class="ui inverted segment" style="background: #1c1917; border: 1px solid #44403c;">
-                            <h4 class="ui yellow header">🔧 Atelier & Cadence</h4>
+                        <div class="ui inverted segment">
+                            <h4 style="color: #fbbf24; margin-bottom: 6px;">🔧 Atelier & Cadence (3h00)</h4>
                             <p>Usure actuelle : <strong id="exp-usure">0%</strong></p>
-                            <div class="ui inverted form" style="margin-bottom: 12px;">
-                                <div class="field">
-                                    <label>Cadence :</label>
-                                    <select id="cadence" class="ui dropdown">
-                                        <option value="0.8">Économique (+Moral)</option>
-                                        <option value="1" selected>Normale (100%)</option>
-                                        <option value="1.25">Intensif (+25% Prod / +Usure)</option>
-                                    </select>
-                                </div>
+                            <div class="ui form" style="margin: 8px 0;">
+                                <select id="cadence" onchange="actionMine('cadence', this.value)">
+                                    <option value="0.8">Cadence Économique (80% / +Moral)</option>
+                                    <option value="1">Cadence Normale (100%)</option>
+                                    <option value="1.25">Cadence Intensive (125% / +Usure)</option>
+                                </select>
                             </div>
                             <div class="ui two buttons">
-                                <button id="btn-reparer" onclick="reparer()" class="ui orange button">Réviser</button>
-                                <button id="btn-prime" onclick="primeMoral()" class="ui blue button">Prime</button>
+                                <button id="btn-reparer" onclick="actionMine('reparer')" class="ui orange button">Réviser</button>
+                                <button id="btn-prime" onclick="actionMine('prime')" class="ui blue button">Prime</button>
                             </div>
                         </div>
                     </div>
-
                 </div>
             </div>
         </div>
@@ -160,39 +144,70 @@
         <!-- ONGLET 3 : CONCESSIONS -->
         <div id="tab-concessions" class="tab-section" style="display: none;">
             <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header"><i class="map icon"></i> Cadastre Minier & Prospection Géologique</h3>
-                <p id="desc-prospection" style="color: #d6d3d1;">
-                    Cliquez sur une concession vierge pour effectuer un carottage, ou sur une zone sondée pour y déplacer vos excavatrices.
-                </p>
+                <h3 class="ui dividing header mine-header">🗺️ Cadastre Minier & Prospection Géologique</h3>
+                <p id="desc-prospection" style="color: #d6d3d1;"></p>
                 <div id="mapGrid" class="pit-grid"></div>
             </div>
         </div>
 
-        <!-- ONGLET 4 : COFFRE & BOURSE -->
+        <!-- ONGLET 4 : CLIENTS & MARKETING -->
         <div id="tab-bourse" class="tab-section" style="display: none;">
-            <div class="ui stackable two column grid">
-                <div class="seven wide column">
+            <div class="ui two column grid">
+                <div class="column">
                     <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header"><i class="lock icon"></i> Coffre-fort de la Raffinerie</h3>
-                        <p id="desc-taxe" style="color: #a8a29e;">Vendez vos lingots lorsque le cours de l'or est au plus haut !</p>
-                        <div class="ui inverted segment" style="background: #1c1917; text-align: center; padding: 25px;">
-                            <div id="coffre-grammes" class="gold-text" style="font-size: 2.5em;">0 g</div>
-                            <div style="color: #a8a29e; margin-top: 5px;">Or raffiné en stock</div>
-                            <div style="margin-top: 15px; font-size: 1.1em;">
-                                Valeur brute estimée : <strong id="coffre-valeur" class="money-text">0 €</strong>
-                            </div>
+                        <h3 class="ui dividing header mine-header">📣 Service Commercial & Étude Marketing</h3>
+                        <p style="color: #d6d3d1; margin-bottom: 8px;">
+                            Votre notoriété détermine votre capacité à vendre cher (jusqu'à <strong class="gold-text">+15%</strong>) face aux autres PDG.
+                        </p>
+                        <div class="ui inverted segment" style="margin-bottom: 10px;">
+                            <div>Votre Notoriété : <strong id="mkt-my" class="gold-text">10 pts</strong> | Moyenne secteur : <strong id="mkt-avg">10 pts</strong> | Leader : <strong id="mkt-max">10 pts</strong></div>
+                            <div style="margin-top: 4px;">Compétitivité : <strong id="mkt-ratio" class="money-text">1.00x</strong> — Étude de marché : <span id="mkt-etude-statut">Verrouillée</span></div>
                         </div>
-                        <button onclick="vendreOr()" class="ui fluid huge yellow button">
-                            <i class="hand holding usd icon"></i> Vendre tout le stock au cours du jour
+                        <button id="btn-marketing" onclick="actionMine('marketing')" class="ui fluid blue button">
+                            Lancer une campagne marketing (+10 pts)
                         </button>
                     </div>
                 </div>
 
-                <div class="nine wide column">
+                <div class="column">
                     <div class="ui segment mine-card">
-                        <h3 class="ui dividing header mine-header"><i class="chart line icon"></i> Cotation de l'Or (€ / gramme)</h3>
-                        <canvas id="chartCoursOr" height="140"></canvas>
+                        <h3 class="ui dividing header mine-header">🔐 Coffre-fort & Négociation Active</h3>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                            <span>Stock disponible : <strong id="coffre-grammes" class="gold-text" style="font-size: 1.3em;">0 g</strong></span>
+                            <span id="desc-taxe" style="color: #a8a29e; font-size: 0.85em;"></span>
+                        </div>
+                        <div class="ui inverted segment">
+                            <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
+                                <label>Marge de négociation : <strong id="negoc-marge-label" class="gold-text">0%</strong></label>
+                                <span style="font-size: 0.85em; color: #a8a29e;">(-15% = vente facile | +15% = marge max)</span>
+                            </div>
+                            <input type="range" id="negoc-marge" min="-15" max="15" value="0" step="1" style="width: 100%;" oninput="majSliderMarge()">
+                        </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="ui segment mine-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h3 class="ui header mine-header" style="margin: 0; border: none; padding: 0;">🤝 Carnet de Commandes Clients (Renouvelé toutes les <span id="info-cycle-heures">4</span>h)</h3>
+                    <span id="countdown-marche" class="ui blue label">Prochain renouvellement : --:--</span>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="ui table">
+                        <thead>
+                            <tr>
+                                <th>Acheteur</th>
+                                <th>Type</th>
+                                <th>Secteur</th>
+                                <th>Demande</th>
+                                <th>Prix Base</th>
+                                <th>Votre Offre</th>
+                                <th>Étude Marché</th>
+                                <th>Vendre (g)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="clients-list"></tbody>
+                    </table>
                 </div>
             </div>
         </div>
@@ -200,8 +215,8 @@
         <!-- ONGLET 5 : CLASSEMENT -->
         <div id="tab-classement" class="tab-section" style="display: none;">
             <div class="ui segment mine-card">
-                <h3 class="ui dividing header mine-header"><i class="trophy yellow icon"></i> Top 10 des Compagnies Minières</h3>
-                <table class="ui inverted celled table">
+                <h3 class="ui dividing header mine-header">🏆 Classement des Compagnies Minières</h3>
+                <table class="ui table">
                     <thead>
                         <tr>
                             <th>Rang</th>
@@ -209,28 +224,28 @@
                             <th>Jour</th>
                             <th>Trésorerie</th>
                             <th>Stock Or</th>
-                            <th>Excavatrices</th>
+                            <th>Engins</th>
+                            <th>Notoriété Mkt</th>
                         </tr>
                     </thead>
                     <tbody id="ranking-list"></tbody>
                 </table>
             </div>
         </div>
-
     </div>
 
-    <!-- FENÊTRE MODALE AUTONOME ÉVÉNEMENTS ALÉATOIRES -->
+    <!-- MODALE INCIDENTS QUOTIDIENS -->
     <div id="eventModal" class="modal-overlay">
         <div class="modal-box">
-            <div id="eventTitle" class="modal-header">Incident</div>
+            <div id="eventTitle" class="modal-header">⚠️ Incident sur le chantier</div>
             <div class="modal-content">
-                <p id="eventDesc">Description...</p>
+                <p id="eventDesc"></p>
             </div>
             <div id="eventChoices" class="modal-actions"></div>
         </div>
     </div>
-    <script src="js/chart.umd.min.js"></script>
+
     <script src="js/version.js"></script>
-    <script src="js/game.js"></script>
+    <script src="js/main.js"></script>
 </body>
 </html>

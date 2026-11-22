@@ -1,109 +1,351 @@
 const express = require('express');
+const router = express.Router();
 const { pool } = require('../config/db');
 const { getGameConfig } = require('../config/gameConfig');
-const { requireAuth } = require('../utils/authMiddleware');
-const { logJoueur } = require('../utils/logger');
+const { synchroniserHorlogeServeur } = require('../utils/gameEngine');
 
-const router = express.Router();
+function requireAuth(req, res, next) {
+    if (!req.session || !req.session.userId) {
+        return res.status(401).json({ error: 'Non connecté' });
+    }
+    next();
+}
 
-// 1. CHARGER LA MINE DU JOUEUR ET LES PARAMÈTRES DU JEU
+async function logJoueur(userId, username, category, details) {
+    await pool.query(
+        'INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, $3, $4)',
+        [userId, username, category, details]
+    );
+}
+
+// 1. ÉTAT COMPLET DU JEU, DU MARCHÉ, DES CLIENTS ET DU MARKETING COMPARATIF
 router.get('/state', requireAuth, async (req, res) => {
     try {
-        const result = await pool.query('SELECT * FROM mines WHERE user_id = $1', [req.session.user.id]);
-        const mine = result.rows.at(0);
+        await synchroniserHorlogeServeur();
+        const cfg = getGameConfig();
 
-        if (!mine) {
-            return res.status(404).json({ error: "Aucune mine trouvée pour ce compte." });
-        }
+        const userRes = await pool.query('SELECT id, username, role FROM users WHERE id = $1', [req.session.userId]);
+        const mineRes = await pool.query('SELECT * FROM mines WHERE user_id = $1', [req.session.userId]);
+        const mktRes = await pool.query('SELECT * FROM market_state WHERE id = 1');
+        const clientsRes = await pool.query('SELECT * FROM market_clients ORDER BY id ASC');
+        const logsRes = await pool.query(
+            'SELECT details, category, created_at FROM player_logs WHERE user_id = $1 ORDER BY created_at DESC LIMIT 25',
+            [req.session.userId]
+        );
+
+        // Calcul de la part de marché marketing par rapport aux autres entreprises
+        const rankMktRes = await pool.query(`
+            SELECT COALESCE(AVG(marketing_points), 10) AS moy_mkt, COALESCE(MAX(marketing_points), 10) AS max_mkt
+            FROM mines
+        `);
+        const mine = mineRes.rows[0];
+        const mkt = mktRes.rows[0];
+        const moyMkt = parseFloat(rankMktRes.rows[0].moy_mkt) || 10;
+        const maxMkt = parseFloat(rankMktRes.rows[0].max_mkt) || 10;
+        const myMkt = parseFloat(mine.marketing_points) || 10;
+
+        // Indice de compétitivité marketing (1.0 = dans la moyenne du secteur)
+        const ratioMarketing = +(myMkt / moyMkt).toFixed(2);
+        const etudeDebloquee = myMkt >= (cfg.seuilEtudeMarche || 25);
+
+        // On masque la marge max exacte des clients si le joueur n'a pas débloqué l'étude de marché
+        const clients = clientsRes.rows.map(c => ({
+            id: c.id,
+            nom: c.nom,
+            type_client: c.type_client,
+            secteur: c.secteur,
+            demande_grammes: parseFloat(c.demande_grammes),
+            prix_base_gramme: parseFloat(c.prix_base_gramme),
+            expires_at: c.expires_at,
+            marge_acceptee_max: etudeDebloquee ? parseFloat(c.marge_acceptee_max) : null
+        }));
 
         res.json({
-            user: req.session.user,
-            config: getGameConfig(),
+            user: userRes.rows[0],
+            config: cfg,
             mine: {
-                jour: parseInt(mine.jour),
+                jour: mine.jour,
                 argent: parseFloat(mine.argent),
                 stockOr: parseFloat(mine.stock_or),
-                coursOr: parseFloat(mine.cours_or),
-                mineurs: parseInt(mine.mineurs),
-                moral: parseInt(mine.moral),
-                foreuses: parseInt(mine.foreuses),
+                mineurs: mine.mineurs,
+                foreuses: mine.foreuses,
+                moral: parseFloat(mine.moral),
                 usure: parseFloat(mine.usure),
-                parcelleActive: parseInt(mine.parcelle_active),
-                parcelles: mine.parcelles_json
-            }
+                cadence: parseFloat(mine.cadence),
+                marketingPoints: myMkt,
+                parcelleActive: mine.parcelle_active,
+                parcelles: mine.parcelles,
+                pendingEvent: mine.pending_event
+            },
+            market: {
+                coursOr: parseFloat(mkt.cours_or),
+                historique: mkt.historique_cours,
+                lastMarketTick: mkt.last_market_tick,
+                moyenneMarketingSecteur: +moyMkt.toFixed(1),
+                leaderMarketingSecteur: +maxMkt.toFixed(1),
+                ratioMarketing,
+                etudeDebloquee,
+                clients
+            },
+            logs: logsRes.rows
         });
     } catch (err) {
-        console.error("Erreur GET /api/game/state :", err);
-        res.status(500).json({ error: "Erreur lors du chargement de la mine." });
+        console.error('Erreur GET /state :', err);
+        res.status(500).json({ error: 'Erreur chargement partie' });
     }
 });
 
-// 2. SAUVEGARDER LA MINE EN BASE DE DONNÉES + ENREGISTRER LE LOG JOUEUR
-router.post('/save', requireAuth, async (req, res) => {
-    const { etat, parcelles, actionCategory, actionLog } = req.body;
-    if (!etat || !parcelles) {
-        return res.status(400).json({ error: "Données de sauvegarde manquantes." });
-    }
+// 2. ACTIONS DE GESTION DE LA MINE (100 % CALCULÉES CÔTÉ SERVEUR)
+router.post('/action', requireAuth, async (req, res) => {
+    const { type, payload } = req.body;
+    const cfg = getGameConfig();
+    const userId = req.session.userId;
 
     try {
-        await pool.query(`
-            UPDATE mines SET
-                jour = $1,
-                argent = $2,
-                stock_or = $3,
-                cours_or = $4,
-                mineurs = $5,
-                moral = $6,
-                foreuses = $7,
-                usure = $8,
-                parcelle_active = $9,
-                parcelles_json = $10,
-                updated_at = CURRENT_TIMESTAMP
-            WHERE user_id = $11
-        `, [
-            etat.jour,
-            etat.argent,
-            etat.stockOr,
-            etat.coursOr,
-            etat.mineurs,
-            etat.moral,
-            etat.foreuses,
-            etat.usure,
-            etat.parcelleActive,
-            JSON.stringify(parcelles),
-            req.session.user.id
-        ]);
+        const mineRes = await pool.query('SELECT * FROM mines WHERE user_id = $1', [userId]);
+        const userRes = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
+        const mine = mineRes.rows[0];
+        const username = userRes.rows[0].username;
 
-        if (actionLog) {
-            await logJoueur(
-                req.session.user.id,
-                req.session.user.username,
-                actionCategory || 'MINE',
-                actionLog
-            );
+        let argent = parseFloat(mine.argent);
+        let mineurs = mine.mineurs;
+        let foreuses = mine.foreuses;
+        let usure = parseFloat(mine.usure);
+        let moral = parseFloat(mine.moral);
+        let cadence = parseFloat(mine.cadence);
+        let marketingPoints = parseFloat(mine.marketing_points);
+        let parcelleActive = mine.parcelle_active;
+        let parcelles = mine.parcelles;
+        let message = '';
+
+        if (type === 'embaucher') {
+            if (argent < cfg.coutMineur) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+            argent -= cfg.coutMineur;
+            mineurs += 1;
+            message = `Recrutement d'un opérateur (-${cfg.coutMineur} €).`;
+            await logJoueur(userId, username, 'MINE', message);
+        } else if (type === 'foreuse') {
+            if (argent < cfg.coutForeuse) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+            argent -= cfg.coutForeuse;
+            foreuses += 1;
+            message = `Achat d'une excavatrice (-${cfg.coutForeuse} €).`;
+            await logJoueur(userId, username, 'MINE', message);
+        } else if (type === 'reparer') {
+            if (argent < cfg.coutRevision) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+            argent -= cfg.coutRevision;
+            usure = Math.max(0, usure - 25);
+            message = `Révision atelier effectuée (-25% usure / -${cfg.coutRevision} €).`;
+            await logJoueur(userId, username, 'MINE', message);
+        } else if (type === 'prime') {
+            if (argent < cfg.coutPrime) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+            argent -= cfg.coutPrime;
+            moral = Math.min(100, moral + 15);
+            message = `Prime versée aux équipes (+15% moral / -${cfg.coutPrime} €).`;
+            await logJoueur(userId, username, 'MINE', message);
+        } else if (type === 'cadence') {
+            const val = parseFloat(payload);
+            if (![0.8, 1, 1.25].includes(val)) return res.status(400).json({ error: 'Cadence invalide' });
+            cadence = val;
+            message = `Cadence du chantier réglée sur ${Math.round(val * 100)}% pour la prochaine clôture.`;
+            await logJoueur(userId, username, 'MINE', message);
+        } else if (type === 'marketing') {
+            if (argent < cfg.coutUniteMarketing) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+            argent -= cfg.coutUniteMarketing;
+            marketingPoints += 10;
+            message = `Campagne marketing lancée (+10 pts notoriété / -${cfg.coutUniteMarketing} €).`;
+            await logJoueur(userId, username, 'MARKETING', message);
+        } else if (type === 'parcelle') {
+            const id = parseInt(payload);
+            const p = parcelles[id];
+            if (!p || id === parcelleActive) return res.status(400).json({ error: 'Parcelle invalide' });
+
+            if (!p.estSondee) {
+                if (argent < cfg.coutCarottage) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+                argent -= cfg.coutCarottage;
+                p.estSondee = true;
+                const erreur = (Math.random() * 0.4) - 0.2;
+                p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
+                message = `Carottage ${p.nom} : teneur estimée à ~${p.estimationPurete} g/t (-${cfg.coutCarottage} €).`;
+                await logJoueur(userId, username, 'PROSPECTION', message);
+            } else {
+                if (argent < cfg.coutDemenagement) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+                argent -= cfg.coutDemenagement;
+                parcelleActive = id;
+                message = `Déménagement vers ${p.nom} (teneur réelle : ${p.pureteReelle} g/t / -${cfg.coutDemenagement} €).`;
+                await logJoueur(userId, username, 'PROSPECTION', message);
+            }
+        } else {
+            return res.status(400).json({ error: 'Action inconnue' });
         }
 
-        res.json({ success: true });
+        await pool.query(
+            `UPDATE mines SET argent = $1, mineurs = $2, foreuses = $3, usure = $4, moral = $5,
+             cadence = $6, marketing_points = $7, parcelle_active = $8, parcelles = $9, updated_at = NOW()
+             WHERE user_id = $10`,
+            [argent, mineurs, foreuses, usure, moral, cadence, marketingPoints, parcelleActive, JSON.stringify(parcelles), userId]
+        );
+
+        res.json({ success: true, message });
     } catch (err) {
-        console.error("Erreur POST /api/game/save :", err);
-        res.status(500).json({ error: "Erreur lors de la sauvegarde en base." });
+        console.error('Erreur POST /action :', err);
+        res.status(500).json({ error: 'Erreur serveur action' });
     }
 });
 
-// 3. CLASSEMENT DES COMPAGNIES MINIÈRES (TOP 10)
+// 3. NÉGOCIATION & VENTE À UN CLIENT DU MARCHÉ (-15 % à +15 % selon le Marketing)
+router.post('/sell-client', requireAuth, async (req, res) => {
+    const { clientId, quantiteGrammes, margeDemandee } = req.body;
+    const cfg = getGameConfig();
+    const userId = req.session.userId;
+
+    const margeMax = cfg.margeNegociationMax || 0.15;
+    const marge = Math.max(-margeMax, Math.min(margeMax, parseFloat(margeDemandee) || 0));
+    const qte = Math.floor(parseFloat(quantiteGrammes) || 0);
+
+    if (qte <= 0) return res.status(400).json({ error: 'Quantité invalide' });
+
+    const clientDb = await pool.connect();
+    try {
+        await clientDb.query('BEGIN');
+
+        const mineRes = await clientDb.query('SELECT * FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        const userRes = await clientDb.query('SELECT username FROM users WHERE id = $1', [userId]);
+        const achRes = await clientDb.query('SELECT * FROM market_clients WHERE id = $1 FOR UPDATE', [clientId]);
+        const rankRes = await clientDb.query('SELECT COALESCE(AVG(marketing_points), 10) AS moy FROM mines');
+
+        if (achRes.rows.length === 0) {
+            await clientDb.query('ROLLBACK');
+            return res.status(404).json({ error: 'Ce client n’est plus disponible sur le marché.' });
+        }
+
+        const mine = mineRes.rows[0];
+        const acheteur = achRes.rows[0];
+        const username = userRes.rows[0].username;
+        const stockOr = parseFloat(mine.stock_or);
+        const demande = parseFloat(acheteur.demande_grammes);
+
+        if (qte > stockOr) {
+            await clientDb.query('ROLLBACK');
+            return res.status(400).json({ error: 'Stock d’or insuffisant dans votre coffre.' });
+        }
+        if (qte > demande) {
+            await clientDb.query('ROLLBACK');
+            return res.status(400).json({ error: `Ce client ne demande que ${demande} g maximum.` });
+        }
+
+        // Calcul de la probabilité de réussite selon le prix demandé et le marketing comparé aux concurrents
+        const myMkt = parseFloat(mine.marketing_points) || 10;
+        const moyMkt = parseFloat(rankRes.rows[0].moy) || 10;
+        const avantageMarketing = (myMkt - moyMkt) / Math.max(10, moyMkt);
+
+        // Base 75% de chance au prix de base, modifiée par la marge (-15% -> +45% chance, +15% -> -45% chance) + bonus marketing
+        let chanceReussite = 0.75 - (marge * 3.0) + (avantageMarketing * 0.25);
+        chanceReussite = Math.max(0.05, Math.min(0.99, chanceReussite));
+
+        const reussite = Math.random() < chanceReussite;
+
+        if (!reussite) {
+            // Échec de négociation : le client refuse l'offre trop chère (petite perte de notoriété)
+            const newMkt = Math.max(1, +(myMkt - 1).toFixed(1));
+            await clientDb.query('UPDATE mines SET marketing_points = $1 WHERE user_id = $2', [newMkt, userId]);
+            await clientDb.query(
+                `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+                [userId, username, `❌ Offre refusée par ${acheteur.nom} (marge ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%, probabilité ${Math.round(chanceReussite * 100)}%).`]
+            );
+            await clientDb.query('COMMIT');
+            return res.json({
+                success: false,
+                message: `Offre refusée par ${acheteur.nom} ! Votre prix était trop élevé par rapport à votre notoriété marketing (${Math.round(chanceReussite * 100)}% de chance).`
+            });
+        }
+
+        // Succès de la vente !
+        const prixUnitaire = +(parseFloat(acheteur.prix_base_gramme) * (1 + marge)).toFixed(2);
+        const brut = qte * prixUnitaire;
+        const taxe = brut * (cfg.taxeMiniere || 0.08);
+        const net = +(brut - taxe).toFixed(2);
+
+        const newStock = +(stockOr - qte).toFixed(1);
+        const newArgent = +(parseFloat(mine.argent) + net).toFixed(2);
+        const newDemande = +(demande - qte).toFixed(1);
+
+        await clientDb.query('UPDATE mines SET stock_or = $1, argent = $2 WHERE user_id = $3', [newStock, newArgent, userId]);
+
+        if (newDemande <= 0) {
+            await clientDb.query('DELETE FROM market_clients WHERE id = $1', [clientId]);
+        } else {
+            await clientDb.query('UPDATE market_clients SET demande_grammes = $1 WHERE id = $2', [newDemande, clientId]);
+        }
+
+        // Impact offre/demande sur le cours mondial
+        const impact = (qte / 1000) * (cfg.impactOffreDemande || 0.02);
+        await clientDb.query(
+            `UPDATE market_state SET cours_or = GREATEST($1, ROUND((cours_or * (1 - $2))::numeric, 2)) WHERE id = 1`,
+            [cfg.coursOrMin || 35, impact]
+        );
+
+        const detailLog = `💰 Vente de ${qte}g à ${acheteur.nom} (${prixUnitaire} €/g, ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%) -> +${Math.round(net).toLocaleString()} € net`;
+        await clientDb.query(
+            `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+            [userId, username, detailLog]
+        );
+
+        await clientDb.query('COMMIT');
+        res.json({ success: true, message: detailLog });
+    } catch (err) {
+        await clientDb.query('ROLLBACK');
+        console.error('Erreur POST /sell-client :', err);
+        res.status(500).json({ error: 'Erreur lors de la transaction' });
+    } finally {
+        clientDb.release();
+    }
+});
+
+// 4. RÉSOUDRE UN ÉVÉNEMENT QUOTIDIEN EN ATTENTE
+router.post('/event-choice', requireAuth, async (req, res) => {
+    const { choiceId } = req.body;
+    const userId = req.session.userId;
+
+    try {
+        const mineRes = await pool.query('SELECT * FROM mines WHERE user_id = $1', [userId]);
+        const userRes = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
+        const mine = mineRes.rows[0];
+        const ev = mine.pending_event;
+
+        if (!ev) return res.status(400).json({ error: 'Aucun événement en attente' });
+        const choix = ev.choix.find(c => c.id === choiceId) || ev.choix[0];
+
+        const argent = parseFloat(mine.argent) + (choix.effet.argent || 0);
+        const moral = Math.max(0, Math.min(100, parseFloat(mine.moral) + (choix.effet.moral || 0)));
+        const usure = Math.max(0, Math.min(100, parseFloat(mine.usure) + (choix.effet.usure || 0)));
+        const stockOr = parseFloat(mine.stock_or) + (choix.effet.bonusOr || 0);
+
+        await pool.query(
+            `UPDATE mines SET argent = $1, moral = $2, usure = $3, stock_or = $4, pending_event = NULL WHERE user_id = $5`,
+            [argent, moral, usure, stockOr, userId]
+        );
+
+        await logJoueur(userId, userRes.rows[0].username, 'MINE', `Événement [${ev.titre}] -> ${choix.texte}`);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Erreur résolution événement' });
+    }
+});
+
+// 5. CLASSEMENT DES COMPAGNIES MINIÈRES
 router.get('/ranking', requireAuth, async (req, res) => {
     try {
-        const result = await pool.query(`
-            SELECT u.username, m.jour, m.argent, m.stock_or, m.foreuses
+        const resRank = await pool.query(`
+            SELECT u.username, m.jour, m.argent, m.stock_or, m.foreuses, m.marketing_points
             FROM mines m
-            JOIN users u ON m.user_id = u.id
+            JOIN users u ON u.id = m.user_id
             WHERE u.is_banned = FALSE
-            ORDER BY m.argent DESC
-            LIMIT 10
+            ORDER BY (m.argent + m.stock_or * 60) DESC
+            LIMIT 15
         `);
-        res.json(result.rows);
+        res.json(resRank.rows);
     } catch (err) {
-        res.status(500).json({ error: "Erreur lors de la récupération du classement." });
+        res.status(500).json({ error: 'Erreur classement' });
     }
 });
 

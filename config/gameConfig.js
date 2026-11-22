@@ -1,28 +1,37 @@
 const { pool } = require('./db');
 
-// Valeurs de secours par défaut si la base n'est pas encore lue
+// Valeurs de secours par défaut (complétées/écrasées par la table game_settings)
 let cachedConfig = {
-    argentDepart: 50000,
+    argentDepart: 15000,
     coursOrInitial: 60.00,
-    coursOrMin: 38.00,
-    coursOrMax: 95.00,
-    taxeMiniere: 0.20,
-    coutMineur: 500,
-    coutForeuse: 10000,
-    coutRevision: 500,
+    coursOrMin: 35.00,
+    coursOrMax: 120.00,
+    taxeMiniere: 0.08,
+    coutMineur: 800,
+    coutForeuse: 5000,
+    coutRevision: 1200,
     coutPrime: 1000,
     coutCarottage: 1500,
     coutDemenagement: 3000,
-    coutPanneForcee: 1000,
-    salaireMineurJour: 150,
-    carburantForeuseJour: 200,
+    coutPanneForcee: 2500,
+    salaireMineurJour: 120,
+    carburantForeuseJour: 450,
     prodMineurTonnes: 2,
     prodForeuseTonnes: 15,
-    usureParForeuse: 3,
-    chanceEvenement: 0.22
+    usureParForeuse: 4,
+    chanceEvenement: 0.30,
+    // Nouvelles variables V2 (Horloge, Bourse 4h, Clients & Marketing)
+    heureClotureJour: 3,
+    cycleMarcheHeures: 4,
+    nbClientsMarche: 10,
+    margeNegociationMax: 0.15,
+    coutUniteMarketing: 1000,
+    usureMarketingJour: 0.10,
+    seuilEtudeMarche: 25,
+    impactOffreDemande: 0.02
 };
 
-// Charge les paramètres depuis PostgreSQL et met à jour le cache
+// Charge tous les paramètres depuis PostgreSQL et met à jour le cache
 async function loadGameConfig() {
     try {
         const res = await pool.query('SELECT key, value FROM game_settings');

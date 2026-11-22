@@ -1,117 +1,72 @@
 let CONFIG = {};
 let etat = {};
-let parcelles = new Array();
+let market = {};
+let parcelles = [];
 
-// 1. MOTEUR GRAPHIQUE 100 % NATIF (SANS CHART.JS)
-function creerGraphiqueMaison(canvasId, couleurLigne, couleurFond) {
-    const canvas = document.getElementById(canvasId);
-    const graph = {
-        labels: [],
-        values: [],
-        update() {
-            if (!canvas) return;
-            const ctx = canvas.getContext('2d');
-            const w = canvas.width = canvas.parentElement.clientWidth - 40;
-            const h = canvas.height = 180;
-            ctx.clearRect(0, 0, w, h);
+// 1. GRAPHIQUE MAISON 100 % NATIF
+function dessinerGraphiqueCours(historique) {
+    const canvas = document.getElementById('chartCoursOr');
+    if (!canvas || !historique || historique.length === 0) return;
 
-            if (this.values.length === 0) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width = canvas.parentElement.clientWidth - 32;
+    const h = canvas.height = 140;
+    ctx.clearRect(0, 0, w, h);
 
-            const pad = 35;
-            const min = Math.min(...this.values) * 0.95;
-            const max = Math.max(...this.values) * 1.05 || 1;
-            const range = max - min || 1;
+    const vals = historique.map(p => parseFloat(p.cours));
+    const pad = 34;
+    const min = Math.min(...vals) * 0.97;
+    const max = Math.max(...vals) * 1.03 || 1;
+    const range = max - min || 1;
 
-            // Grille horizontale
-            ctx.strokeStyle = '#44403c';
-            ctx.lineWidth = 1;
+    ctx.strokeStyle = '#44403c';
+    ctx.fillStyle = '#a8a29e';
+    ctx.font = '10px sans-serif';
+    for (let i = 0; i <= 2; i++) {
+        const y = pad / 2 + (i / 2) * (h - pad - 10);
+        const val = max - (i / 2) * range;
+        ctx.beginPath();
+        ctx.moveTo(pad, y);
+        ctx.lineTo(w - 10, y);
+        ctx.stroke();
+        ctx.fillText(val.toFixed(1) + '€', 2, y + 3);
+    }
+
+    const stepX = vals.length > 1 ? (w - pad - 15) / (vals.length - 1) : 0;
+    const pts = vals.map((v, i) => ({
+        x: pad + i * stepX,
+        y: (pad / 2) + (1 - (v - min) / range) * (h - pad - 10)
+    }));
+
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = '#fbbf24';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    pts.forEach((p, i) => {
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#fbbf24';
+        ctx.fill();
+        if (i === 0 || i === pts.length - 1 || pts.length <= 8) {
             ctx.fillStyle = '#a8a29e';
-            ctx.font = '11px sans-serif';
-            for (let i = 0; i <= 3; i++) {
-                const y = pad + (i / 3) * (h - pad * 2);
-                const val = max - (i / 3) * range;
-                ctx.beginPath();
-                ctx.moveTo(pad, y);
-                ctx.lineTo(w - 10, y);
-                ctx.stroke();
-                ctx.fillText(Math.round(val).toLocaleString(), 2, y + 4);
-            }
-
-            // Points de la courbe
-            const stepX = this.values.length > 1 ? (w - pad - 15) / (this.values.length - 1) : 0;
-            const pts = this.values.map((v, i) => ({
-                x: pad + i * stepX,
-                y: pad + (1 - (v - min) / range) * (h - pad * 2)
-            }));
-
-            // Zone remplie sous la courbe
-            if (pts.length > 1) {
-                ctx.beginPath();
-                ctx.moveTo(pts[0].x, h - pad);
-                pts.forEach(p => ctx.lineTo(p.x, p.y));
-                ctx.lineTo(pts[pts.length - 1].x, h - pad);
-                ctx.closePath();
-                ctx.fillStyle = couleurFond;
-                ctx.fill();
-            }
-
-            // Ligne principale + points
-            ctx.beginPath();
-            pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-            ctx.strokeStyle = couleurLigne;
-            ctx.lineWidth = 2.5;
-            ctx.stroke();
-
-            pts.forEach((p, i) => {
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
-                ctx.fillStyle = couleurLigne;
-                ctx.fill();
-                if (i === 0 || i === pts.length - 1 || pts.length <= 8) {
-                    ctx.fillStyle = '#a8a29e';
-                    ctx.fillText(this.labels[i], p.x - 10, h - 10);
-                }
-            });
+            ctx.fillText(historique[i].label, p.x - 10, h - 4);
         }
-    };
-    return {
-        data: { labels: graph.labels, datasets: [{ data: graph.values }] },
-        update: () => graph.update()
-    };
+    });
 }
 
-const chartPatrimoine = creerGraphiqueMaison('chartPatrimoine', '#34d399', 'rgba(52, 211, 153, 0.15)');
-const chartCoursOr = creerGraphiqueMaison('chartCoursOr', '#fbbf24', 'rgba(251, 191, 36, 0.15)');
+function afficherToast(msg, isError = false) {
+    const box = document.getElementById('game-toast');
+    if (!box) return;
+    box.className = isError ? 'ui red message' : 'ui green message';
+    box.innerText = msg;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 4000);
+}
 
-// 2. CATALOGUE DES ÉVÉNEMENTS ALÉATOIRES
-const EVENEMENTS = new Array(
-    {
-        titre: "Glissement de terrain sur le gradin Nord",
-        desc: "Les fortes pluies fragilisent la paroi de la mine à ciel ouvert.",
-        choix: new Array(
-            { texte: "Sécuriser avec des soutènements (3 000 €)", action: () => { etat.argent -= 3000; log("Paroi stabilisée. Aucun blessé."); } },
-            { texte: "Continuer l'extraction (-25% Moral équipes)", action: () => { etat.moral = Math.max(0, etat.moral - 25); log("Les équipes travaillent sous la peur d'un éboulement."); } }
-        )
-    },
-    {
-        titre: "Flambée de la demande en joaillerie",
-        desc: "Les acheteurs internationaux se ruent sur l'or physique !",
-        choix: new Array(
-            { texte: "Excellente nouvelle ! (+12% sur le cours de l'or)", action: () => { etat.coursOr = Math.min(CONFIG.coursOrMax, etat.coursOr * 1.12); log("Le cours de l'or bondit sur les marchés !"); } }
-        )
-    },
-    {
-        titre: "Mouvement social des conducteurs d'engins",
-        desc: "Les opérateurs réclament une prime de poussière et de chaleur.",
-        choix: new Array(
-            { texte: "Verser une prime (2 000 € / +20% Moral)", action: () => { etat.argent -= 2000; etat.moral = Math.min(100, etat.moral + 20); log("Prime versée. Le moral remonte en flèche."); } },
-            { texte: "Refuser (-30% Moral)", action: () => { etat.moral = Math.max(0, etat.moral - 30); log("Tensions syndicales sur le site."); } }
-        )
-    }
-);
-
-// 3. CHARGEMENT DE LA PARTIE DEPUIS POSTGRESQL
-async function initialiserJeu() {
+// 2. CHARGEMENT COMPLET DEPUIS LE SERVEUR
+async function chargerEtatJeu() {
     try {
         const res = await fetch('/api/game/state');
         if (res.status === 401) {
@@ -121,6 +76,7 @@ async function initialiserJeu() {
         const data = await res.json();
         CONFIG = data.config;
         etat = data.mine;
+        market = data.market;
         parcelles = data.mine.parcelles;
 
         document.getElementById('stat-username').innerText = data.user.username;
@@ -128,88 +84,84 @@ async function initialiserJeu() {
             document.getElementById('btn-admin-link').style.display = 'inline-flex';
         }
 
-        // Lien passerelle TchatGC
         const resLinks = await fetch('/api/links');
         const dataLinks = await resLinks.json();
         if (dataLinks.tchatgcUrl) {
             document.getElementById('link-tchatgc-game').href = dataLinks.tchatgcUrl;
         }
 
-        // Affichage des prix dynamiques issus de la table game_settings
-        document.getElementById('desc-mineur').innerText = `Extrait ${CONFIG.prodMineurTonnes}t/jour. Salaire : ${CONFIG.salaireMineurJour} €/jour.`;
+        // Libellés dynamiques depuis game_settings
+        document.getElementById('info-heure-cloture').innerText = `${CONFIG.heureClotureJour}h00`;
+        document.getElementById('info-cycle-heures').innerText = CONFIG.cycleMarcheHeures;
+        document.getElementById('desc-mineur').innerText = `Extrait ${CONFIG.prodMineurTonnes}t/j | Salaire : ${CONFIG.salaireMineurJour} €/j`;
         document.getElementById('btn-embaucher').innerText = `Recruter (${CONFIG.coutMineur} €)`;
-        document.getElementById('desc-foreuse').innerText = `Extrait ${CONFIG.prodForeuseTonnes}t/jour. Carburant : ${CONFIG.carburantForeuseJour} €/jour.`;
-        document.getElementById('btn-foreuse').innerText = `Acheter Engin (${CONFIG.coutForeuse} €)`;
+        document.getElementById('desc-foreuse').innerText = `Extrait ${CONFIG.prodForeuseTonnes}t/j | Carburant : ${CONFIG.carburantForeuseJour} €/j`;
+        document.getElementById('btn-foreuse').innerText = `Acheter (${CONFIG.coutForeuse} €)`;
         document.getElementById('btn-reparer').innerText = `Réviser (${CONFIG.coutRevision} €)`;
         document.getElementById('btn-prime').innerText = `Prime (${CONFIG.coutPrime} €)`;
-        document.getElementById('desc-prospection').innerText = `Carottage géologique : ${CONFIG.coutCarottage} € | Déménagement des engins : ${CONFIG.coutDemenagement} €`;
-        document.getElementById('desc-taxe').innerText = `Vendez vos lingots au meilleur cours (Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%).`;
+        document.getElementById('btn-marketing').innerText = `Campagne Marketing +10 pts (${CONFIG.coutUniteMarketing} €)`;
+        document.getElementById('desc-prospection').innerText = `Carottage : ${CONFIG.coutCarottage} € | Déménagement engins : ${CONFIG.coutDemenagement} €`;
+        document.getElementById('desc-taxe').innerText = `Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%`;
 
-        // Point initial sur les courbes
-        if (chartPatrimoine && chartCoursOr) {
-            chartPatrimoine.data.labels.push('J' + etat.jour);
-            chartPatrimoine.data.datasets.at(0).data.push(Math.round(etat.argent));
-            chartPatrimoine.update();
+        const selectCadence = document.getElementById('cadence');
+        if (selectCadence) selectCadence.value = String(etat.cadence);
 
-            chartCoursOr.data.labels.push('J' + etat.jour);
-            chartCoursOr.data.datasets.at(0).data.push(etat.coursOr.toFixed(2));
-            chartCoursOr.update();
+        majAffichage(data.logs);
+        dessinerGraphiqueCours(market.historique);
+
+        if (etat.pendingEvent) {
+            afficherModaleEvenement(etat.pendingEvent);
         }
-
-        majAffichage();
     } catch (err) {
-        console.error("Erreur lors du chargement du jeu :", err);
+        console.error('Erreur chargement jeu :', err);
     }
 }
 
-// 4. SAUVEGARDE AUTOMATIQUE EN BASE POSTGRESQL + LOG JOUEUR
-async function sauvegarderEnBase(actionCategory = 'MINE', actionLog = '') {
-    const badge = document.getElementById('save-indicator');
-    badge.className = 'ui yellow mini label';
-    badge.innerText = '⏳ Sauvegarde...';
-
-    try {
-        await fetch('/api/game/save', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ etat, parcelles, actionCategory, actionLog })
-        });
-        badge.className = 'ui green mini label';
-        badge.innerText = '💾 Synchronisé';
-    } catch (err) {
-        badge.className = 'ui red mini label';
-        badge.innerText = '⚠️ Erreur Sync';
-    }
-}
-
-function changerOnglet(nomOnglet, elementMenu) {
-    document.querySelectorAll('.tab-section').forEach(el => el.style.display = 'none');
-    document.getElementById('tab-' + nomOnglet).style.display = 'block';
-    document.querySelectorAll('.mine-nav .item').forEach(el => el.classList.remove('active'));
-    elementMenu.classList.add('active');
-}
-
-function majAffichage() {
-    const pActive = parcelles.at(etat.parcelleActive);
+function majAffichage(logs = null) {
+    const pActive = parcelles[etat.parcelleActive] || parcelles[0];
     document.getElementById('stat-jour').innerText = etat.jour;
-    document.getElementById('stat-argent').innerText = Math.round(etat.argent).toLocaleString() + " €";
-    document.getElementById('stat-stock').innerText = Math.round(etat.stockOr).toLocaleString() + " g";
-    document.getElementById('stat-cours').innerText = etat.coursOr.toFixed(2) + " €/g";
+    document.getElementById('stat-argent').innerText = Math.round(etat.argent).toLocaleString() + ' €';
+    document.getElementById('stat-stock').innerText = Math.round(etat.stockOr).toLocaleString() + ' g';
+    document.getElementById('stat-cours').innerText = market.coursOr.toFixed(2) + ' €/g';
+    document.getElementById('stat-mkt').innerText = Math.round(etat.marketingPoints) + ' pts';
 
-    document.getElementById('kpi-reserve').innerText = Math.round(pActive.reserveReelle).toLocaleString() + " t";
-    document.getElementById('kpi-purete').innerText = pActive.pureteReelle + " g/t";
+    document.getElementById('kpi-reserve').innerText = Math.round(pActive.reserveReelle).toLocaleString() + ' t';
+    document.getElementById('kpi-purete').innerText = pActive.pureteReelle + ' g/t';
     document.getElementById('kpi-engins').innerText = etat.foreuses;
-    document.getElementById('kpi-moral').innerText = Math.round(etat.moral) + "%";
-    document.getElementById('kpi-usure').innerText = Math.round(etat.usure) + "%";
+    document.getElementById('kpi-moral').innerText = Math.round(etat.moral) + '%';
+    document.getElementById('kpi-usure').innerText = Math.round(etat.usure) + '%';
 
     document.getElementById('exp-mineurs').innerText = etat.mineurs;
     document.getElementById('exp-foreuses').innerText = etat.foreuses;
-    document.getElementById('exp-usure').innerText = Math.round(etat.usure) + "%";
+    document.getElementById('exp-usure').innerText = Math.round(etat.usure) + '%';
 
-    document.getElementById('coffre-grammes').innerText = Math.round(etat.stockOr).toLocaleString() + " g";
-    document.getElementById('coffre-valeur').innerText = Math.round(etat.stockOr * etat.coursOr).toLocaleString() + " €";
+    document.getElementById('coffre-grammes').innerText = Math.round(etat.stockOr).toLocaleString() + ' g';
+    document.getElementById('mkt-my').innerText = etat.marketingPoints.toFixed(1) + ' pts';
+    document.getElementById('mkt-avg').innerText = market.moyenneMarketingSecteur + ' pts';
+    document.getElementById('mkt-max').innerText = market.leaderMarketingSecteur + ' pts';
+    document.getElementById('mkt-ratio').innerText = market.ratioMarketing + 'x';
+    document.getElementById('mkt-etude-statut').innerHTML = market.etudeDebloquee
+        ? '<span class="ui green label">Débloquée (Infos clients visibles)</span>'
+        : `<span class="ui orange label">Requis : ${CONFIG.seuilEtudeMarche} pts</span>`;
+
+    if (pActive.reserveReelle < 250) {
+        document.getElementById('conseil-assistante').innerText = '« Attention Patron, notre fosse actuelle est presque épuisée avant la prochaine clôture. »';
+    } else if (etat.usure > 60) {
+        document.getElementById('conseil-assistante').innerText = `« Nos engins sont usés à ${Math.round(etat.usure)}%. Une révision évitera une panne coûteuse à ${CONFIG.heureClotureJour}h00. »`;
+    } else {
+        document.getElementById('conseil-assistante').innerText = `« Chantier opérationnel. Prochaine extraction automatique à ${CONFIG.heureClotureJour}h00. »`;
+    }
+
+    if (logs) {
+        const box = document.getElementById('journal-log');
+        box.innerHTML = logs.map(l => {
+            const h = new Date(l.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+            return `<div><span style="color:#fbbf24;">[${h}]</span> ${l.details}</div>`;
+        }).join('');
+    }
 
     dessinerCarte();
+    dessinerClientsMarche();
 }
 
 function dessinerCarte() {
@@ -219,213 +171,137 @@ function dessinerCarte() {
         const div = document.createElement('div');
         div.className = 'pit-tile' + (p.id === etat.parcelleActive ? ' active' : '') + (p.reserveReelle <= 0 ? ' depleted' : '');
         if (p.id === etat.parcelleActive) {
-            div.innerHTML = `<div class="ui green mini label">EN COURS</div><h4 style="margin:5px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div>`;
+            div.innerHTML = `<div class="ui green label">ACTIF</div><h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div>`;
         } else if (p.estSondee) {
-            div.innerHTML = `<div class="ui blue mini label">SONDÉ</div><h4 style="margin:5px 0; color:#e7e5e4;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer : ${CONFIG.coutDemenagement} €</small>`;
+            div.innerHTML = `<div class="ui blue label">SONDÉ</div><h4 style="margin:4px 0;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer: ${CONFIG.coutDemenagement}€</small>`;
         } else {
-            div.innerHTML = `<div class="ui grey mini label">VIERGE</div><h4 style="margin:5px 0; color:#a8a29e;">${p.nom}</h4><small>Carottage : ${CONFIG.coutCarottage} €</small>`;
+            div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;
         }
-        div.onclick = () => interagirParcelle(p.id);
+        div.onclick = () => actionMine('parcelle', p.id);
         grid.appendChild(div);
     });
 }
 
-async function interagirParcelle(id) {
-    const p = parcelles.at(id);
-    if (id === etat.parcelleActive) return;
+function majSliderMarge() {
+    const val = parseInt(document.getElementById('negoc-marge').value);
+    document.getElementById('negoc-marge-label').innerText = (val > 0 ? '+' : '') + val + '%';
+    dessinerClientsMarche();
+}
 
-    if (!p.estSondee) {
-        if (etat.argent >= CONFIG.coutCarottage) {
-            etat.argent -= CONFIG.coutCarottage;
-            p.estSondee = true;
-            let erreur = (Math.random() * 0.5) - 0.25;
-            p.estimationPurete = Math.max(1, (p.pureteReelle * (1 + erreur))).toFixed(1);
-            log(`Rapport géologique (${p.nom}) : teneur estimée à ~${p.estimationPurete} g/t.`);
-            majAffichage();
-            await sauvegarderEnBase('PROSPECTION', `Carottage sur ${p.nom} (-${CONFIG.coutCarottage} €)`);
-        } else {
-            log(`❌ Trésorerie insuffisante (${CONFIG.coutCarottage} €).`);
-        }
+function dessinerClientsMarche() {
+    const tbody = document.getElementById('clients-list');
+    if (!tbody || !market.clients) return;
+
+    const margePct = parseInt(document.getElementById('negoc-marge').value) || 0;
+    const marge = margePct / 100;
+
+    tbody.innerHTML = market.clients.map(c => {
+        const prixOffre = (c.prix_base_gramme * (1 + marge)).toFixed(2);
+        const maxVendable = Math.min(Math.floor(etat.stockOr), Math.floor(c.demande_grammes));
+
+        let badgeType = 'blue';
+        if (c.type_client === 'Particulier') badgeType = 'green';
+        if (c.type_client === 'Événementiel') badgeType = 'orange';
+
+        const infoEtude = market.etudeDebloquee && c.marge_acceptee_max !== null
+            ? `<span class="money-text">Tolérance : +${Math.round(c.marge_acceptee_max * 100)}%</span>`
+            : `<span style="color:#78716c;">🔒 Étude requise</span>`;
+
+        return `
+            <tr>
+                <td><strong>${c.nom}</strong></td>
+                <td><span class="ui ${badgeType} label">${c.type_client}</span></td>
+                <td>${c.secteur}</td>
+                <td><strong>${Math.round(c.demande_grammes).toLocaleString()} g</strong></td>
+                <td>${c.prix_base_gramme.toFixed(2)} €/g</td>
+                <td class="gold-text">${prixOffre} €/g</td>
+                <td>${infoEtude}</td>
+                <td>
+                    <div class="ui action input" style="min-width: 140px;">
+                        <input type="number" id="qte-client-${c.id}" min="1" max="${maxVendable}" value="${maxVendable > 0 ? maxVendable : ''}" placeholder="g">
+                        <button class="ui yellow mini button" onclick="vendreAuClient(${c.id})" ${maxVendable <= 0 ? 'disabled' : ''}>Vendre</button>
+                    </div>
+                </td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function actionMine(type, payload = null) {
+    const res = await fetch('/api/game/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, payload })
+    });
+    const data = await res.json();
+    if (data.success) {
+        afficherToast(data.message, false);
+        await chargerEtatJeu();
     } else {
-        if (etat.argent >= CONFIG.coutDemenagement) {
-            etat.argent -= CONFIG.coutDemenagement;
-            etat.parcelleActive = id;
-            log(`🚜 Transfert des excavatrices vers le ${p.nom} (Teneur réelle : ${p.pureteReelle} g/t).`);
-            majAffichage();
-            await sauvegarderEnBase('PROSPECTION', `Déménagement vers ${p.nom} (-${CONFIG.coutDemenagement} €)`);
-        } else {
-            log(`❌ Trésorerie insuffisante (${CONFIG.coutDemenagement} €).`);
-        }
+        afficherToast(data.error, true);
     }
 }
 
-function log(msg) {
-    const box = document.getElementById('journal-log');
-    box.innerHTML = `<div><span style="color:#fbbf24;">[Jour ${etat.jour}]</span> ${msg}</div>` + box.innerHTML;
+async function vendreAuClient(clientId) {
+    const input = document.getElementById('qte-client-' + clientId);
+    const quantiteGrammes = parseFloat(input.value);
+    const margeDemandee = (parseInt(document.getElementById('negoc-marge').value) || 0) / 100;
+
+    const res = await fetch('/api/game/sell-client', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clientId, quantiteGrammes, margeDemandee })
+    });
+    const data = await res.json();
+    afficherToast(data.message || data.error, !data.success);
+    await chargerEtatJeu();
 }
 
-// 5. ACTIONS DU JOUEUR
-async function embaucher() {
-    if (etat.argent >= CONFIG.coutMineur) {
-        etat.argent -= CONFIG.coutMineur;
-        etat.mineurs++;
-        log("Nouvel opérateur recruté.");
-        majAffichage();
-        await sauvegarderEnBase('MINE', `Recrutement 1 mineur (Total: ${etat.mineurs})`);
-    }
-}
-
-async function acheterForeuse() {
-    if (etat.argent >= CONFIG.coutForeuse) {
-        etat.argent -= CONFIG.coutForeuse;
-        etat.foreuses++;
-        log("Nouvelle excavatrice mise en service !");
-        majAffichage();
-        await sauvegarderEnBase('MINE', `Achat 1 excavatrice (Total: ${etat.foreuses})`);
-    }
-}
-
-async function reparer() {
-    if (etat.argent >= CONFIG.coutRevision && etat.usure > 0) {
-        etat.argent -= CONFIG.coutRevision;
-        etat.usure = Math.max(0, etat.usure - 25);
-        log("Révision atelier terminée (-25% usure).");
-        majAffichage();
-        await sauvegarderEnBase('MINE', `Révision atelier (-${CONFIG.coutRevision} €)`);
-    }
-}
-
-async function primeMoral() {
-    if (etat.argent >= CONFIG.coutPrime) {
-        etat.argent -= CONFIG.coutPrime;
-        etat.moral = Math.min(100, etat.moral + 15);
-        log("Prime versée aux équipes (+15% moral).");
-        majAffichage();
-        await sauvegarderEnBase('MINE', `Prime versée aux équipes (-${CONFIG.coutPrime} €)`);
-    }
-}
-
-async function vendreOr() {
-    if (etat.stockOr <= 0) {
-        log("Aucun lingot en stock à vendre.");
-        return;
-    }
-    let brut = etat.stockOr * etat.coursOr;
-    let impots = brut * CONFIG.taxeMiniere;
-    let net = brut - impots;
-    const grammesVendus = Math.round(etat.stockOr);
-    etat.argent += net;
-    log(`💰 Vente de ${grammesVendus}g d'or à ${etat.coursOr.toFixed(2)}€/g. Gain net : +${Math.round(net).toLocaleString()} €.`);
-    etat.stockOr = 0;
-    majAffichage();
-    await sauvegarderEnBase('FINANCE', `Vente de ${grammesVendus}g d'or (+${Math.round(net)} € net)`);
-}
-
-// MODALE 100 % JAVASCRIPT NATIF (SANS JQUERY NI FOMANTIC)
-function declencherEvenement() {
-    const ev = EVENEMENTS.at(Math.floor(Math.random() * EVENEMENTS.length));
+function afficherModaleEvenement(ev) {
     const modal = document.getElementById('eventModal');
-    document.getElementById('eventTitle').innerText = "⚠️ " + ev.titre;
+    document.getElementById('eventTitle').innerText = '⚠️ ' + ev.titre;
     document.getElementById('eventDesc').innerText = ev.desc;
-    
     const choicesDiv = document.getElementById('eventChoices');
     choicesDiv.innerHTML = '';
-    
+
     ev.choix.forEach(c => {
         const btn = document.createElement('button');
         btn.className = 'ui fluid yellow button';
         btn.innerText = c.texte;
         btn.onclick = async () => {
-            c.action();
+            await fetch('/api/game/event-choice', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ choiceId: c.id })
+            });
             modal.classList.remove('open');
-            majAffichage();
-            await sauvegarderEnBase('MINE', `Événement [${ev.titre}] -> ${c.texte}`);
+            await chargerEtatJeu();
         };
         choicesDiv.appendChild(btn);
     });
-    
     modal.classList.add('open');
 }
 
-// 6. SIMULATION QUOTIDIENNE
-async function jourSuivant() {
-    etat.jour++;
-    const cadence = parseFloat(document.getElementById('cadence').value);
-    const pActive = parcelles.at(etat.parcelleActive);
-
-    etat.coursOr = Math.max(CONFIG.coursOrMin, Math.min(CONFIG.coursOrMax, etat.coursOr * (1 + (Math.random() * 8 - 4) / 100)));
-    etat.moral = Math.max(0, Math.min(100, etat.moral - ((cadence - 1) * 20) + 2));
-    let greve = etat.moral < 25;
-
-    etat.usure = Math.min(100, etat.usure + (etat.foreuses * CONFIG.usureParForeuse * cadence));
-    let panne = (Math.random() * 100) < etat.usure;
-
-    let prodMineurs = greve ? 0 : (etat.mineurs * CONFIG.prodMineurTonnes * cadence * (etat.moral / 100));
-    let prodForeuses = panne ? 0 : (etat.foreuses * CONFIG.prodForeuseTonnes * cadence);
-    let rocheExtraite = Math.min(pActive.reserveReelle, prodMineurs + prodForeuses);
-    pActive.reserveReelle -= rocheExtraite;
-
-    let orProduit = rocheExtraite * pActive.pureteReelle;
-    etat.stockOr += orProduit;
-
-    let couts = (etat.mineurs * CONFIG.salaireMineurJour) + (etat.foreuses * CONFIG.carburantForeuseJour);
-    etat.argent -= couts;
-
-    if (etat.coursOr > 72) {
-        document.getElementById('conseil-assistante').innerText = "« Le cours de l'or est au plus haut (" + etat.coursOr.toFixed(2) + " €/g) ! Allez dans Coffre & Bourse pour vendre vos lingots ! »";
-    } else if (pActive.reserveReelle < 250) {
-        document.getElementById('conseil-assistante').innerText = "« Attention Patron, notre fosse actuelle est presque épuisée. Sondez un nouveau secteur dans l'onglet Concessions. »";
-    } else if (etat.usure > 60) {
-        document.getElementById('conseil-assistante').innerText = "« Nos excavatrices souffrent (" + Math.round(etat.usure) + "% d'usure). Une révision éviterait une panne. »";
-    }
-
-    let msg = `Extrait : ${Math.round(rocheExtraite)}t (+${Math.round(orProduit)}g d'or) | Frais fixes : -${couts} €`;
-    if (greve) msg += " | ✊ GRÈVE !";
-    if (panne) {
-        msg += ` | ⚠️ PANNE ENGIN (-${CONFIG.coutPanneForcee} € réparation)`;
-        etat.usure = 0;
-        etat.argent -= CONFIG.coutPanneForcee;
-    }
-    if (pActive.reserveReelle <= 0) msg += " | 🛑 FOSSE ÉPUISÉE !";
-    log(msg);
-
-    if (chartPatrimoine && chartCoursOr) {
-        const dsArgent = chartPatrimoine.data.datasets.at(0);
-        const dsOr = chartCoursOr.data.datasets.at(0);
-        if (chartPatrimoine.data.labels.length > 20) {
-            chartPatrimoine.data.labels.shift();
-            dsArgent.data.shift();
-            chartCoursOr.data.labels.shift();
-            dsOr.data.shift();
-        }
-        chartPatrimoine.data.labels.push('J' + etat.jour);
-        dsArgent.data.push(Math.round(etat.argent));
-        chartPatrimoine.update();
-
-        chartCoursOr.data.labels.push('J' + etat.jour);
-        dsOr.data.push(etat.coursOr.toFixed(2));
-        chartCoursOr.update();
-    }
-
-    majAffichage();
-    await sauvegarderEnBase('MINE', `Jour ${etat.jour} | Trésorerie: ${Math.round(etat.argent)} € | Stock Or: ${Math.round(etat.stockOr)}g`);
-
-    if (Math.random() < CONFIG.chanceEvenement) declencherEvenement();
+function changerOnglet(nomOnglet, elMenu) {
+    document.querySelectorAll('.tab-section').forEach(el => el.style.display = 'none');
+    document.getElementById('tab-' + nomOnglet).style.display = 'block';
+    document.querySelectorAll('.mine-nav .item').forEach(el => el.classList.remove('active'));
+    elMenu.classList.add('active');
 }
 
 async function chargerClassement() {
     const res = await fetch('/api/game/ranking');
     if (!res.ok) return;
     const joueurs = await res.json();
-    const tbody = document.getElementById('ranking-list');
-    tbody.innerHTML = joueurs.map((j, index) => `
+    document.getElementById('ranking-list').innerHTML = joueurs.map((j, idx) => `
         <tr>
-            <td><strong>#${index + 1}</strong></td>
+            <td><strong>#${idx + 1}</strong></td>
             <td>${j.username}</td>
             <td>J${j.jour}</td>
             <td class="money-text">${Math.round(j.argent).toLocaleString()} €</td>
             <td class="gold-text">${Math.round(j.stock_or).toLocaleString()} g</td>
             <td>${j.foreuses}</td>
+            <td>${Math.round(j.marketing_points || 10)} pts</td>
         </tr>
     `).join('');
 }
@@ -435,5 +311,26 @@ async function deconnexion() {
     window.location.href = '/index.html';
 }
 
-initialiserJeu();
+setInterval(() => {
+    if (CONFIG.heureClotureJour === undefined) return;
+    const now = new Date();
+    const cibleCloture = new Date();
+    cibleCloture.setHours(CONFIG.heureClotureJour, 0, 0, 0);
+    if (now >= cibleCloture) cibleCloture.setDate(cibleCloture.getDate() + 1);
+    const diffSec = Math.floor((cibleCloture - now) / 1000);
+    const h = String(Math.floor(diffSec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((diffSec % 3600) / 60)).padStart(2, '0');
+    const elCloture = document.getElementById('countdown-cloture');
+    if (elCloture) elCloture.innerText = `⏳ Clôture : ${h}h${m}`;
 
+    if (market.clients && market.clients.length > 0) {
+        const exp = new Date(market.clients.expires_at);
+        const diffMkt = Math.max(0, Math.floor((exp - now) / 1000));
+        const mh = String(Math.floor(diffMkt / 3600)).padStart(2, '0');
+        const mm = String(Math.floor((diffMkt % 3600) / 60)).padStart(2, '0');
+        const elMkt = document.getElementById('countdown-marche');
+        if (elMkt) elMkt.innerText = `Renouvellement dans ${mh}h${mm}`;
+    }
+}, 1000);
+
+chargerEtatJeu();

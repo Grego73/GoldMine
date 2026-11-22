@@ -4,30 +4,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gold Mine - Administration</title>
+    <link rel="icon" type="image/png" href="favicon.png">
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
 
-    <div class="ui inverted menu mine-nav">
-        <div class="header item">
-            <i class="shield alternate yellow icon"></i> PANEL ADMIN — GOLD MINE
-        </div>
+    <div class="ui menu mine-nav">
+        <div class="header item">🛡️ PANEL ADMIN — GOLD MINE</div>
         <div class="right menu">
-            <div class="item">
-                <span class="app-version" style="font-weight: bold;">Vérification version...</span>
-            </div>
-            <a href="/game.html" class="item"><i class="arrow left icon"></i> Retour à ma mine</a>
+            <span class="app-version" style="font-weight: bold;">v2.0.0</span>
+            <a href="/game.html" class="item">← Retour à ma mine</a>
         </div>
     </div>
 
-    <div class="ui container" style="margin-top: 25px;">
+    <div class="ui container" style="margin-top: 15px;">
         <div id="admin-alert" class="ui message" style="display: none;"></div>
 
-        <!-- 1. LISTE DES JOUEURS -->
+        <!-- 1. JOUEURS -->
         <div class="ui segment mine-card">
-            <h3 class="ui dividing header mine-header"><i class="users icon"></i> Compagnies & Joueurs inscrits</h3>
+            <h3 class="ui dividing header mine-header">👥 Compagnies & Joueurs inscrits</h3>
             <div style="overflow-x: auto;">
-                <table class="ui inverted celled compact table">
+                <table class="ui table">
                     <thead>
                         <tr>
                             <th>ID</th>
@@ -38,7 +35,7 @@
                             <th>Jour</th>
                             <th>Trésorerie</th>
                             <th>Stock Or</th>
-                            <th>Engins</th>
+                            <th>Mkt</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
@@ -47,46 +44,78 @@
             </div>
         </div>
 
-        <!-- 2. PARAMÈTRES DU JEU -->
+        <!-- 2. CATALOGUE CLIENTS (PARTICULIER, ENTREPRISE, ÉVÉNEMENTIEL) -->
         <div class="ui segment mine-card">
-            <h3 class="ui dividing header mine-header"><i class="sliders horizontal icon"></i> Équilibrage du Jeu (Base PostgreSQL)</h3>
-            <p style="color: #a8a29e;">Toute modification enregistrée ici s'applique immédiatement à l'ensemble du serveur.</p>
-            <div id="admin-settings-grid" class="ui three column stackable grid"></div>
-        </div>
-
-        <!-- 3. TEXTES DU SITE -->
-        <div class="ui segment mine-card">
-            <h3 class="ui dividing header mine-header"><i class="edit icon"></i> Textes de la Page d'Accueil</h3>
-            <p style="color: #a8a29e;">Modifiez ici le titre et l'explication du but du jeu affichés aux visiteurs sur la page d'accueil.</p>
-            <div id="admin-texts-container"></div>
-        </div>
-
-        <!-- 4. LOGS JOUEURS -->
-        <div class="ui segment mine-card">
-            <h3 class="ui dividing header mine-header"><i class="history icon"></i> Suivi d'activité des Joueurs (100 dernières actions)</h3>
-            <div class="ui action input" style="margin-bottom: 15px;">
-                <input type="text" id="filter-player-log" placeholder="Filtrer par pseudo PDG...">
-                <button class="ui yellow button" onclick="chargerLogsJoueurs()">Filtrer / Actualiser</button>
+            <h3 class="ui dividing header mine-header">🤝 Catalogue des Clients Acheteurs (Extensible à l'infini)</h3>
+            <div class="ui form" style="background: #1c1917; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
+                <div style="display: grid; grid-template-columns: 2fr 1.2fr 1.2fr 1fr 1fr 1fr 1fr 1fr auto; gap: 8px; align-items: end;">
+                    <div><label>Nom du client</label><input type="text" id="new-client-nom" placeholder="Ex: Joaillerie Milan"></div>
+                    <div><label>Type</label>
+                        <select id="new-client-type">
+                            <option value="Entreprise">Entreprise</option>
+                            <option value="Particulier">Particulier</option>
+                            <option value="Événementiel">Événementiel</option>
+                        </select>
+                    </div>
+                    <div><label>Secteur</label><input type="text" id="new-client-secteur" placeholder="Luxe, Banque..."></div>
+                    <div><label>Min (g)</label><input type="number" id="new-client-min" value="100"></div>
+                    <div><label>Max (g)</label><input type="number" id="new-client-max" value="800"></div>
+                    <div><label>Bonus Min</label><input type="number" step="0.01" id="new-client-bmin" value="-0.05"></div>
+                    <div><label>Bonus Max</label><input type="number" step="0.01" id="new-client-bmax" value="0.12"></div>
+                    <div><label>Poids</label><input type="number" id="new-client-poids" value="10"></div>
+                    <div><button class="ui green button" onclick="ajouterClientCatalogue()">+ Ajouter</button></div>
+                </div>
             </div>
-            <div style="max-height: 300px; overflow-y: auto;">
-                <table class="ui inverted celled compact table">
+            <div style="overflow-x: auto;">
+                <table class="ui table">
                     <thead>
                         <tr>
-                            <th>Date & Heure</th>
-                            <th>PDG</th>
-                            <th>Catégorie</th>
-                            <th>Détail de l'action</th>
+                            <th>Nom</th>
+                            <th>Type</th>
+                            <th>Secteur</th>
+                            <th>Volume (g)</th>
+                            <th>Marge Prix</th>
+                            <th>Poids</th>
+                            <th>Action</th>
                         </tr>
                     </thead>
-                    <tbody id="admin-player-logs-list"></tbody>
+                    <tbody id="admin-clients-catalog"></tbody>
                 </table>
             </div>
         </div>
 
-        <!-- 5. LOGS ADMIN -->
+        <!-- 3. VARIABLES D'ÉQUILIBRAGE -->
         <div class="ui segment mine-card">
-            <h3 class="ui dividing header mine-header"><i class="terminal icon"></i> Dernières actions d'administration</h3>
-            <div id="admin-logs-list" style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.9em; background: #0c0a09; padding: 10px; border-radius: 4px;"></div>
+            <h3 class="ui dividing header mine-header">⚙️ Variables d'Équilibrage (25 paramètres en direct)</h3>
+            <div id="admin-settings-grid" class="ui three column grid"></div>
+        </div>
+
+        <!-- 4. TEXTES ACCUEIL -->
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">📝 Textes de la Page d'Accueil</h3>
+            <div id="admin-texts-container"></div>
+        </div>
+
+        <!-- 5. LOGS JOUEURS & ADMIN -->
+        <div class="ui two column grid">
+            <div class="column">
+                <div class="ui segment mine-card">
+                    <h3 class="ui dividing header mine-header">📜 Activité Joueurs</h3>
+                    <div class="ui action input" style="margin-bottom: 10px;">
+                        <input type="text" id="filter-player-log" placeholder="Filtrer par pseudo...">
+                        <button class="ui yellow button" onclick="chargerLogsJoueurs()">Filtrer</button>
+                    </div>
+                    <div style="max-height: 220px; overflow-y: auto;">
+                        <table class="ui table"><tbody id="admin-player-logs-list"></tbody></table>
+                    </div>
+                </div>
+            </div>
+            <div class="column">
+                <div class="ui segment mine-card">
+                    <h3 class="ui dividing header mine-header">🖥️ Journal Admin</h3>
+                    <div id="admin-logs-list" style="max-height: 260px; overflow-y: auto; font-family: monospace; font-size: 0.85em; background: #0c0a09; padding: 8px; border-radius: 4px;"></div>
+                </div>
+            </div>
         </div>
     </div>
 
