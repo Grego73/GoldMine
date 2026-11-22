@@ -8,17 +8,17 @@ const { logJoueur } = require('../utils/logger');
 
 const router = express.Router();
 
-// 0. TEXTE DE PRÉSENTATION DE L'ACCUEIL (avec valeurs de secours)
+// 0. TEXTE DE PRÉSENTATION DE L'ACCUEIL
 router.get('/welcome-text', async (req, res) => {
     try {
-        const result = await pool.query("SELECT title, content FROM site_texts WHERE key = 'welcome_intro'");
-        res.json(result.rows.at(0) || TEXTES_SECOURS.welcome_intro);
+        const result = await pool.query("SELECT title, content FROM site_texts WHERE key = 'welcome'");
+        res.json(result.rows || TEXTES_SECOURS.welcome_intro);
     } catch (err) {
         res.json(TEXTES_SECOURS.welcome_intro);
     }
 });
 
-// 1. INSCRIPTION (Création du compte + envoi du code de validation par e-mail)
+// 1. INSCRIPTION
 router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     const cleanEmail = nettoyerEmail(email);
@@ -33,20 +33,20 @@ router.post('/register', async (req, res) => {
 
         const hash = await bcrypt.hash(password, 10);
         const countRes = await client.query('SELECT COUNT(*) FROM users');
-        const role = parseInt(countRes.rows.at(0).count) === 0 ? 'admin' : 'player';
+        const role = parseInt(countRes.rows.count) === 0 ? 'admin' : 'player';
         const codeValidation = genererCodeSecurite();
 
         const userRes = await client.query(
             'INSERT INTO users (username, email, password_hash, role, is_verified, verification_code) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, username, role',
             [username.trim(), cleanEmail, hash, role, false, codeValidation]
         );
-        const user = userRes.rows.at(0);
+        const user = userRes.rows;
 
         const cfg = getGameConfig();
         const parcellesInit = genererParcellesInitiales();
         await client.query(
-            'INSERT INTO mines (user_id, argent, cours_or, parcelles_json) VALUES ($1, $2, $3, $4)',
-            [user.id, cfg.argentDepart, cfg.coursOrInitial, JSON.stringify(parcellesInit)]
+            'INSERT INTO mines (user_id, argent, parcelles) VALUES ($1, $2, $3)',
+            [user.id, cfg.argentDepart, JSON.stringify(parcellesInit)]
         );
 
         await client.query('COMMIT');
@@ -80,10 +80,11 @@ router.post('/verify-email', async (req, res) => {
             'UPDATE users SET is_verified = TRUE, verification_code = NULL WHERE email = $1 AND verification_code = $2 RETURNING id, username, role',
             [cleanEmail, (code || '').trim()]
         );
-        const user = result.rows.at(0);
+        const user = result.rows;
         if (!user) return res.status(400).json({ error: "Code de validation incorrect." });
 
         req.session.user = user;
+        req.session.userId = user.id;
         await logJoueur(user.id, user.username, 'AUTH', 'Compte validé par e-mail (Inscription terminée)');
 
         res.json({ success: true, user });
@@ -93,7 +94,7 @@ router.post('/verify-email', async (req, res) => {
     }
 });
 
-// 2. CONNEXION
+// 2. CONNEXION (Crée aussi la mine automatiquement si l'utilisateur existait avant la V2)
 router.post('/login', async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) {
@@ -102,7 +103,7 @@ router.post('/login', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT * FROM users WHERE username = $1', [username.trim()]);
-        const user = result.rows.at(0);
+        const user = result.rows;
 
         if (!user || !(await bcrypt.compare(password, user.password_hash))) {
             return res.status(401).json({ error: "Identifiant ou mot de passe incorrect." });
@@ -114,7 +115,18 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ error: "Veuillez valider votre e-mail avec le code reçu.", unverifiedEmail: user.email });
         }
 
+        // Vérifie si le joueur a déjà une mine V2, sinon on la initialise proprement
+        const mineCheck = await pool.query('SELECT user_id FROM mines WHERE user_id = $1', [user.id]);
+        if (mineCheck.rows.length === 0) {
+            const cfg = getGameConfig();
+            await pool.query(
+                'INSERT INTO mines (user_id, argent, parcelles) VALUES ($1, $2, $3)',
+                [user.id, cfg.argentDepart, JSON.stringify(genererParcellesInitiales())]
+            );
+        }
+
         req.session.user = { id: user.id, username: user.username, role: user.role };
+        req.session.userId = user.id;
         await logJoueur(user.id, user.username, 'AUTH', 'Connexion au jeu');
 
         res.json({ success: true, user: req.session.user });
@@ -131,17 +143,16 @@ router.post('/forgot-password', async (req, res) => {
 
     try {
         const result = await pool.query('SELECT id, username FROM users WHERE email = $1', [cleanEmail]);
-        const user = result.rows.at(0);
+        const user = result.rows;
         if (!user) return res.status(404).json({ error: "Aucun compte trouvé avec cet e-mail." });
 
         const code = genererCodeSecurite();
-        const expires = new Date(Date.now() + 15 * 60 * 1000);
-        await pool.query('UPDATE users SET reset_code = $1, reset_expires = $2 WHERE id = $3', [code, expires, user.id]);
+        await pool.query('UPDATE users SET reset_code = $1 WHERE id = $2', [code, user.id]);
 
         await envoyerEmail(
             cleanEmail,
             "🔑 Récupération de mot de passe - Gold Mine",
-            `<p>Bonjour ${user.username}, voici votre code de réinitialisation (valable 15 min) :</p><h1 style="color:#d97706;">${code}</h1>`
+            `<p>Bonjour ${user.username}, voici votre code de réinitialisation :</p><h1 style="color:#d97706;">${code}</h1>`
         );
         res.json({ success: true, message: "Un code de secours à 6 chiffres vient d'être envoyé sur votre e-mail." });
     } catch (err) {
@@ -161,14 +172,14 @@ router.post('/reset-password', async (req, res) => {
 
     try {
         const result = await pool.query(
-            'SELECT id, username FROM users WHERE email = $1 AND reset_code = $2 AND reset_expires > NOW()',
+            'SELECT id, username FROM users WHERE email = $1 AND reset_code = $2',
             [cleanEmail, code.trim()]
         );
-        const user = result.rows.at(0);
-        if (!user) return res.status(400).json({ error: "Code invalide ou expiré." });
+        const user = result.rows;
+        if (!user) return res.status(400).json({ error: "Code invalide." });
 
         const hash = await bcrypt.hash(newPassword, 10);
-        await pool.query('UPDATE users SET password_hash = $1, reset_code = NULL, reset_expires = NULL WHERE id = $2', [hash, user.id]);
+        await pool.query('UPDATE users SET password_hash = $1, reset_code = NULL WHERE id = $2', [hash, user.id]);
         await logJoueur(user.id, user.username, 'AUTH', 'Mot de passe réinitialisé via code de secours');
 
         res.json({ success: true, message: "Mot de passe modifié ! Vous pouvez vous connecter." });
@@ -179,7 +190,9 @@ router.post('/reset-password', async (req, res) => {
 });
 
 router.get('/me', (req, res) => {
-    if (req.session && req.session.user) return res.json({ loggedIn: true, user: req.session.user });
+    if (req.session && (req.session.user || req.session.userId)) {
+        return res.json({ loggedIn: true, user: req.session.user });
+    }
     res.json({ loggedIn: false });
 });
 

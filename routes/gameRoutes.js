@@ -4,12 +4,22 @@ const { pool } = require('../config/db');
 const { getGameConfig } = require('../config/gameConfig');
 const { synchroniserHorlogeServeur } = require('../utils/gameEngine');
 
+function getSessionUserId(req) {
+    if (!req.session) return null;
+    if (req.session.userId) return req.session.userId;
+    if (req.session.user && req.session.user.id) return req.session.user.id;
+    return null;
+}
+
 function requireAuth(req, res, next) {
-    if (!req.session || !req.session.userId) {
+    const uid = getSessionUserId(req);
+    if (!uid) {
         return res.status(401).json({ error: 'Non connecté' });
     }
+    req.session.userId = uid;
     next();
 }
+
 
 async function logJoueur(userId, username, category, details) {
     await pool.query(
