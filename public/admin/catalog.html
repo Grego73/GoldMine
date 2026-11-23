@@ -41,7 +41,7 @@
         </div>
 
         <!-- AJOUT UNITAIRE -->
-        <div style="display:grid; grid-template-columns: 1.4fr 1fr 0.8fr 0.7fr 0.7fr 0.7fr 0.7fr 0.6fr auto; gap:6px; margin-bottom:14px;">
+        <div style="display:grid; grid-template-columns: 1.4fr 1fr 0.8fr 0.7fr 0.7fr 0.7fr 0.7fr 0.7fr 0.6fr auto; gap:6px; margin-bottom:14px;">
             <input type="text" id="new-eq-nom" placeholder="Nom engin">
             <input type="text" id="new-eq-cat" placeholder="Famille (Excavation...)">
             <select id="new-eq-gab">
@@ -50,7 +50,8 @@
                 <option value="Géant">Géant</option>
             </select>
             <input type="number" id="new-eq-prix" placeholder="Prix €">
-            <input type="number" id="new-eq-prod" placeholder="Prod t/j">
+            <input type="number" id="new-eq-vmin" placeholder="Min t/h" value="30">
+            <input type="number" id="new-eq-vmax" placeholder="Max t/h" value="60">
             <input type="number" id="new-eq-carb" placeholder="Carb €/j">
             <input type="number" step="any" id="new-eq-usure" placeholder="Usure %/j">
             <input type="number" id="new-eq-pieces" placeholder="Pièces" value="1">

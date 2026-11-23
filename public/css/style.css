@@ -399,3 +399,10 @@ a:hover {
 .ui.action.input input {
     flex: 1;
 }
+/* Uniformisation de la largeur des badges Famille (bleu) et Gabarit (jaune) */
+.ui.blue.label,
+.ui.yellow.label {
+    display: inline-block;
+    min-width: 82px;
+    text-align: center;
+}

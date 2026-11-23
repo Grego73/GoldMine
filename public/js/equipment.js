@@ -49,6 +49,8 @@ function rendreMaFlotte() {
             let actions = '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
             if (f.statut === 'EN_PANNE') {
                 actions = `<button class="ui mini red button" onclick="reparerPanne(${f.id})">🚨 Réparer (${nbPieces} pièce(s) ${f.categorie} ${gab})</button>`;
+            } else if (f.statut === 'OFFRE_LOC') {
+                actions = `<button class="ui mini red button" onclick="annulerOffreLocation(${f.id})">❌ Retirer l'offre</button>`;
             } else if (f.statut === 'ACTIF') {
                 actions = `
                     <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%)</button>
@@ -106,7 +108,7 @@ function rendreBoutiqueNeuf() {
                     <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
                 </div>
                 <h4 style="color:#fbbf24; margin-bottom:8px;">${item.nom}</h4>
-                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Extraction : <strong>${item.prod_tonnes} t/jour</strong></p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Extraction : <strong>${item.prod_tonnes} t/jour</strong> (${item.vitesse_min_th}-${item.vitesse_max_th} t/h)</p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛽ Carburant : <strong>${item.carburant_jour} €/jour</strong></p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⚙️ Usure : <strong>${item.usure_jour}% /jour</strong> (Garanti 0% neuf)</p>
                 <p style="font-size:0.88em; color:#a8a29e; margin-bottom:12px;">🔧 Pièces en cas de panne : <strong>${item.pieces_panne || 1} pièce(s)</strong></p>
@@ -192,28 +194,26 @@ function rendreBrocanteEncheres() {
     }).join('');
 }
 
-// 5. LOCATION D'ENGINS
+// 5. LOCATION D'ENGINS (PARC OFFICIEL CORRIGÉ + OFFRES PDG)
 function rendreLocationEngins() {
     const offTbody = document.getElementById('eq-official-rentals-tbody');
     if (offTbody && eqData) {
+        const coeff = parseFloat(eqData.coeffLoyerJeu) || 0.08;
         offTbody.innerHTML = eqData.catalog.map(item => {
-            const loyerEstime = Math.round(parseFloat(item.prix_neuf) * 0.08);
+            const loyerEstime = Math.round(parseFloat(item.prix_neuf) * coeff);
             return `
                 <tr>
                     <td><strong>${item.nom}</strong> <span class="ui blue label">${item.categorie}</span> <span class="ui yellow label">${item.gabarit || 'Moyen'}</span></td>
                     <td><strong>${item.prod_tonnes} t/j</strong></td>
                     <td>${item.carburant_jour} €/j</td>
-                    <td class="money-text">~${loyerEstime.toLocaleString()} €/j</td>
+                    <td class="money-text">${loyerEstime.toLocaleString()} €/j</td>
                     <td>
-                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                            <strong>${item.nom}</strong>
-                            <div style="display:flex; gap:5px;">
-                                <span class="ui blue label">${item.categorie}</span>
-                                <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
-                            </div>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="rent-days-${item.id}" min="1" max="7" value="3" style="width:55px; padding:4px;">
+                            <span style="font-size:0.85em; color:#a8a29e;">j</span>
+                            <button class="ui mini green button" onclick="louerOfficiel(${item.id}, document.getElementById('rent-days-${item.id}').value)">✍️ Louer</button>
                         </div>
                     </td>
-
                 </tr>
             `;
         }).join('');
@@ -239,6 +239,14 @@ function rendreLocationEngins() {
 }
 
 // --- ACTIONS API ---
+function notifierEq(data) {
+    if (typeof afficherToast === 'function') {
+        afficherToast(data.message || data.error, !data.success);
+    } else {
+        alert(data.message || data.error);
+    }
+}
+
 async function acheterEnginNeuf(catalogId) {
     const res = await fetch('/api/equipment/buy-new', {
         method: 'POST',
@@ -246,7 +254,7 @@ async function acheterEnginNeuf(catalogId) {
         body: JSON.stringify({ catalogId })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
@@ -258,7 +266,7 @@ async function acheterPieceConcession(categorie, gabarit) {
         body: JSON.stringify({ categorie, gabarit, quantite: 1 })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
@@ -270,8 +278,9 @@ async function reparerPanne(fleetId) {
         body: JSON.stringify({ fleetId })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
 
 async function reviserEngin(fleetId) {
@@ -281,7 +290,7 @@ async function reviserEngin(fleetId) {
         body: JSON.stringify({ fleetId })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
@@ -301,8 +310,9 @@ async function ouvrirVenteEngin(fleetId) {
         body: JSON.stringify({ fleetId, modeVente, prixDepart, dureeHeures })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
 
 async function encherirOuAcheter(auctionId, montantOffre) {
@@ -312,7 +322,7 @@ async function encherirOuAcheter(auctionId, montantOffre) {
         body: JSON.stringify({ auctionId, montantOffre })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
@@ -329,8 +339,21 @@ async function ouvrirLocationEngin(fleetId) {
         body: JSON.stringify({ fleetId, loyerJour, dureeJours })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function annulerOffreLocation(fleetId) {
+    const res = await fetch('/api/equipment/cancel-rental-offer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fleetId })
+    });
+    const data = await res.json();
+    notifierEq(data);
+    chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
 
 async function louerOfficiel(catalogId, dureeJours) {
@@ -340,7 +363,7 @@ async function louerOfficiel(catalogId, dureeJours) {
         body: JSON.stringify({ sourceType: 'OFFICIEL', catalogId, dureeJours })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
@@ -352,7 +375,7 @@ async function louerPdg(rentalId) {
         body: JSON.stringify({ sourceType: 'PDG', rentalId })
     });
     const data = await res.json();
-    alert(data.message || data.error);
+    notifierEq(data);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }

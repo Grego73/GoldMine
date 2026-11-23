@@ -14,9 +14,12 @@ const gameRoutes = require('./routes/gameRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const { router: hrRoutes } = require('./routes/hrRoutes');
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 let isMaintenance = true;
+let isTickRunning = false;
+let clockInterval = null;
 
 app.set('trust proxy', 1);
 app.use(express.json());
@@ -46,17 +49,38 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/links', (req, res) => res.json(LINKS));
 app.get('/api/version', (req, res) => res.json({ version: APP_VERSION }));
 
+function demarrerHorloge() {
+    if (clockInterval) return;
+    clockInterval = setInterval(async () => {
+        if (isMaintenance || isTickRunning) return;
+        isTickRunning = true;
+        try {
+            await synchroniserHorlogeServeur();
+        } finally {
+            isTickRunning = false;
+        }
+    }, 60 * 1000);
+}
+
 // Routes toujours accessibles (même en maintenance)
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
-// Verrou de maintenance pour les routes de jeu uniquement
-app.use('/api', (req, res, next) => {
+// Verrou de maintenance pour les routes de jeu uniquement (avec tentative de reprise auto)
+app.use('/api', async (req, res, next) => {
     if (isMaintenance) {
-        return res.status(503).json({
-            maintenance: true,
-            error: 'Site en maintenance : base de données temporairement inaccessible ou non configurée.'
-        });
+        try {
+            await loadGameConfig();
+            isMaintenance = false;
+            demarrerHorloge();
+            console.log('✅ Base de données prête : sortie automatique du mode maintenance.');
+            return next();
+        } catch (e) {
+            return res.status(503).json({
+                maintenance: true,
+                error: 'Site en maintenance : base de données temporairement inaccessible ou non configurée.'
+            });
+        }
     }
     next();
 });
@@ -71,12 +95,7 @@ async function startServer() {
         await loadGameConfig();
         isMaintenance = false;
         await synchroniserHorlogeServeur();
-
-        setInterval(async () => {
-            if (!isMaintenance) {
-                await synchroniserHorlogeServeur();
-            }
-        }, 60 * 1000);
+        demarrerHorloge();
 
         console.log(`🚀 Gold Mine v${APP_VERSION} opérationnel (Mode BDD strict actif).`);
     } catch (err) {

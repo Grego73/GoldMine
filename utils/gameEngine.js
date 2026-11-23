@@ -12,20 +12,90 @@ function tirerClientPondere(catalogue) {
     return catalogue.at(0);
 }
 
-async function genererClientsMarche(clientDb, coursOr, cfg) {
+async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
+    // 1. Ventes d'or réalisées sur les 4 dernières heures (logs FINANCE commençant par '💰 Vente de Xg')
+    const ventesRes = await clientDb.query(`
+        SELECT details FROM player_logs
+        WHERE category = 'FINANCE'
+          AND details LIKE '💰 Vente de %'
+          AND created_at >= NOW() - INTERVAL '4 hours'
+    `);
+    let orVendu4h = 0;
+    for (const row of ventesRes.rows) {
+        const match = row.details.match(/Vente de\s+(\d+(?:\.\d+)?)g/i);
+        if (match) orVendu4h += parseFloat(match.at(1)) || 0;
+    }
+
+    // 2. Production d'or extraite sur les 4 dernières heures (logs MINE 'Extraction horaire')
+    const prodRes = await clientDb.query(`
+        SELECT details FROM player_logs
+        WHERE category = 'MINE'
+          AND details LIKE '%Extraction horaire%'
+          AND created_at >= NOW() - INTERVAL '4 hours'
+    `);
+    let orProduit4h = 0;
+    for (const row of prodRes.rows) {
+        const match = row.details.match(/\+(\d+(?:\.\d+)?)g d'or/i);
+        if (match) orProduit4h += parseFloat(match.at(1)) || 0;
+    }
+
+    // 3. Volume d'achats matériels & investissements sur les 4 dernières heures
+    const achatsRes = await clientDb.query(`
+        SELECT COUNT(*) AS nb FROM player_logs
+        WHERE category IN ('MATERIEL', 'PROSPECTION')
+          AND created_at >= NOW() - INTERVAL '4 hours'
+    `);
+    const nbAchats4h = parseInt(achatsRes.rows.at(0).nb) || 0;
+
+    // 4. Stock d'or moyen détenu par les compagnies actives
+    const stocksRes = await clientDb.query(`
+        SELECT COALESCE(AVG(stock_or), 0) AS moy_stock, COUNT(*) AS nb_mines
+        FROM mines m JOIN users u ON u.id = m.user_id
+        WHERE u.is_banned = FALSE
+    `);
+    const moyStock = parseFloat(stocksRes.rows.at(0).moy_stock) || 0;
+
+    // Calcul du solde Offre / Demande :
+    // - Ventes massives -> pression baissière
+    // - Production stockée + achats matériels actifs -> tension haussière
+    const ratioVenteSurProd = orProduit4h > 0 ? (orVendu4h / orProduit4h) : (orVendu4h > 0 ? 1.5 : 0.5);
+    const effetVentes = (0.65 - Math.min(2.0, ratioVenteSurProd)) * 0.035; // -4.7% à +2.3%
+    const effetInvestissement = Math.min(0.025, nbAchats4h * 0.004);      // jusqu'à +2.5% si achats soutenus
+    const aleaMarche = (Math.random() * 0.024) - 0.012;                    // bruit naturel ±1.2%
+
+    const variationTotale = Math.max(-0.06, Math.min(0.06, effetVentes + effetInvestissement + aleaMarche));
+    const nouveauCours = Math.max(
+        cfg.coursOrMin || 35,
+        Math.min(cfg.coursOrMax || 110, +(coursActuel * (1 + variationTotale)).toFixed(2))
+    );
+
+    // Multiplicateur de demande client (s'adapte si la production/stock moyen augmente)
+    const multDemande = Math.max(1.0, Math.min(4.0, 1 + (moyStock / 2500)));
+
+    return {
+        nouveauCours,
+        variationPct: +(variationTotale * 100).toFixed(2),
+        orVendu4h: Math.round(orVendu4h),
+        orProduit4h: Math.round(orProduit4h),
+        nbAchats4h,
+        multDemande
+    };
+}
+
+async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
     const resCat = await clientDb.query('SELECT * FROM clients_catalog WHERE actif = TRUE');
     if (resCat.rows.length === 0) return;
 
     await clientDb.query('DELETE FROM market_clients');
 
-    const nbClients = Math.max(1, Math.round(cfg.nbClientsMarche));
-    const heuresCycle = Math.max(1, cfg.cycleMarcheHeures);
+    const nbClients = Math.max(1, Math.round(cfg.nbClientsMarche || 6));
+    const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
     const expiresAt = new Date(Date.now() + heuresCycle * 3600 * 1000);
 
     for (let i = 0; i < nbClients; i++) {
         const modele = tirerClientPondere(resCat.rows);
-        const minGr = parseFloat(modele.min_gr);
-        const maxGr = parseFloat(modele.max_gr);
+        const minGr = parseFloat(modele.min_gr) * multDemande;
+        const maxGr = parseFloat(modele.max_gr) * multDemande;
         const demande = Math.round(minGr + Math.random() * (maxGr - minGr));
 
         const bMin = parseFloat(modele.bonus_min);
@@ -33,7 +103,7 @@ async function genererClientsMarche(clientDb, coursOr, cfg) {
         const bonusPrix = bMin + Math.random() * (bMax - bMin);
         const prixBase = +(coursOr * (1 + bonusPrix)).toFixed(2);
 
-        const margeMax = +(Math.random() * cfg.margeNegociationMax).toFixed(3);
+        const margeMax = +(Math.random() * (cfg.margeNegociationMax || 0.15)).toFixed(3);
 
         await clientDb.query(
             `INSERT INTO market_clients (nom, type_client, secteur, demande_grammes, prix_base_gramme, marge_acceptee_max, expires_at)
@@ -46,21 +116,22 @@ async function genererClientsMarche(clientDb, coursOr, cfg) {
 async function resoudreEncheresExpirees(clientDb, cfg) {
     const expiredRes = await clientDb.query(`
         SELECT a.*, f.nom FROM market_auctions a
-        JOIN player_fleet f ON f.id = a.fleet_id
+        LEFT JOIN player_fleet f ON f.id = a.fleet_id
         WHERE a.expires_at <= NOW()
         FOR UPDATE OF a
     `);
 
     for (const auc of expiredRes.rows) {
-        if (auc.mode_vente === 'ENCHERE' && auc.highest_bidder_id) {
-            const prixFinal = parseFloat(auc.prix_actuel);
-            const netVendeur = +(prixFinal * (1 - cfg.commissionBrocantePct)).toFixed(2);
+        if (auc.nom) {
+            if (auc.mode_vente === 'ENCHERE' && auc.highest_bidder_id) {
+                const prixFinal = parseFloat(auc.prix_actuel);
+                const netVendeur = +(prixFinal * (1 - cfg.commissionBrocantePct)).toFixed(2);
 
-            await clientDb.query('UPDATE mines SET argent = argent + $1, foreuses = GREATEST(0, foreuses - 1) WHERE user_id = $2', [netVendeur, auc.seller_id]);
-            await clientDb.query('UPDATE mines SET foreuses = foreuses + 1 WHERE user_id = $1', [auc.highest_bidder_id]);
-            await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF' WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
-        } else {
-            await clientDb.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [auc.fleet_id]);
+                await clientDb.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netVendeur, auc.seller_id]);
+                await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF' WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
+            } else {
+                await clientDb.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [auc.fleet_id]);
+            }
         }
         await clientDb.query('DELETE FROM market_auctions WHERE id = $1', [auc.id]);
     }
@@ -83,31 +154,40 @@ async function synchroniserHorlogeServeur() {
         let coursOr = parseFloat(mkt.cours_or);
         let historique = Array.isArray(mkt.historique_cours) ? mkt.historique_cours : [];
 
-        // A. CYCLE MARCHÉ & CLIENTS (TOUTES LES 4 HEURES)
-        const msCycle = cfg.cycleMarcheHeures * 3600 * 1000;
-        const tempsEcouleMarche = Date.now() - new Date(mkt.last_market_tick).getTime();
+        // A. CYCLE MARCHÉ & PRIX CLIENTS DYNAMIQUES (TOUTES LES 4 HEURES)
+        const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
+        const msCycle = heuresCycle * 3600 * 1000;
+        const baseTickMarche = new Date(mkt.last_market_tick).getTime();
+        const tempsEcouleMarche = Date.now() - baseTickMarche;
 
         const resCountClients = await client.query('SELECT COUNT(*) FROM market_clients');
         const aucunClient = parseInt(resCountClients.rows.at(0).count) === 0;
 
         if (tempsEcouleMarche >= msCycle || aucunClient) {
-            const variation = (Math.random() * 6 - 2.5) / 100;
-            coursOr = Math.max(cfg.coursOrMin, Math.min(cfg.coursOrMax, +(coursOr * (1 + variation)).toFixed(2)));
+            const dyn = await calculerDynamiqueMarche4h(client, coursOr, cfg);
+            coursOr = dyn.nouveauCours;
 
             const heureLabel = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
             historique.push({ label: heureLabel, cours: coursOr });
             if (historique.length > 24) historique.shift();
 
-            await genererClientsMarche(client, coursOr, cfg);
+            await genererClientsMarche(client, coursOr, cfg, dyn.multDemande);
+
+            const cyclesPasses = Math.max(1, Math.floor(tempsEcouleMarche / msCycle));
+            const nouveauTickMarche = tempsEcouleMarche >= msCycle
+                ? new Date(baseTickMarche + cyclesPasses * msCycle)
+                : new Date();
+
             await client.query(
-                `UPDATE market_state SET cours_or = $1, historique_cours = $2, last_market_tick = NOW() WHERE id = 1`,
-                [coursOr, JSON.stringify(historique)]
+                `UPDATE market_state SET cours_or = $1, historique_cours = $2, last_market_tick = $3 WHERE id = 1`,
+                [coursOr, JSON.stringify(historique), nouveauTickMarche]
             );
         }
 
         // B. EXTRACTION HORAIRE EN DIRECT (TOUTES LES HEURES PILES)
         const msHeure = 3600 * 1000;
-        const tempsEcouleHeure = Date.now() - new Date(mkt.last_hourly_tick || mkt.last_market_tick).getTime();
+        const baseTickHeure = new Date(mkt.last_hourly_tick || mkt.last_market_tick).getTime();
+        const tempsEcouleHeure = Date.now() - baseTickHeure;
 
         if (tempsEcouleHeure >= msHeure) {
             const heuresEcoulees = Math.min(24, Math.floor(tempsEcouleHeure / msHeure));
@@ -116,13 +196,13 @@ async function synchroniserHorlogeServeur() {
                 SELECT m.*, u.username FROM mines m
                 JOIN users u ON u.id = m.user_id
                 WHERE u.is_banned = FALSE
+                FOR UPDATE OF m
             `);
 
             for (const mine of resMines.rows) {
                 const parcelles = mine.parcelles;
                 const cadence = parseFloat(mine.cadence) || 1.0;
 
-                // Effectifs RH & Cadres Trombinoscope
                 const mineurs = parseInt(mine.mineurs) || 0;
                 const conducteurs = parseInt(mine.conducteurs) || 0;
                 const mecaniciens = parseInt(mine.mecaniciens) || 0;
@@ -138,14 +218,15 @@ async function synchroniserHorlogeServeur() {
                 let moral = Math.max(0, Math.min(100, parseFloat(mine.moral) - (((cadence - 1) * 20) / 24 * heuresEcoulees) + ((hasRSE ? 4 : 2) / 24 * heuresEcoulees)));
                 const greve = moral < 25;
 
-                // Flotte active & Locations en cours
-                const fleetRes = await client.query(`SELECT * FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' ORDER BY vitesse_reglee_th DESC`, [mine.user_id]);
-                const rentalsRes = await client.query(`SELECT * FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS' ORDER BY vitesse_reglee_th DESC`, [mine.user_id]);
+                const totalFleetRes = await client.query(`SELECT COUNT(*) FROM player_fleet WHERE owner_id = $1`, [mine.user_id]);
+                const nbTotalPossedes = parseInt(totalFleetRes.rows.at(0).count) || 0;
 
-                const nbEnginsTotal = fleetRes.rows.length + rentalsRes.rows.length;
+                const fleetRes = await client.query(`SELECT * FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' FOR UPDATE`, [mine.user_id]);
+                const rentalsRes = await client.query(`SELECT * FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS' FOR UPDATE`, [mine.user_id]);
 
-                // Ratios Mécaniciens (1 pour 3 engins) & Chefs d'équipe (1 pour 8 ouvriers)
-                const mecaRequis = nbEnginsTotal > 0 ? Math.ceil(nbEnginsTotal / (cfg.enginsParMecano || 3)) : 0;
+                const nbEnginsActifs = fleetRes.rows.length + rentalsRes.rows.length;
+
+                const mecaRequis = nbEnginsActifs > 0 ? Math.ceil(nbEnginsActifs / (cfg.enginsParMecano || 3)) : 0;
                 const multUsureMecano = mecaniciens < mecaRequis ? (cfg.usureSansMecanoMult || 1.5) : 1.0;
                 const multUsureCadre = hasMaintenance ? 0.75 : 1.0;
 
@@ -153,108 +234,98 @@ async function synchroniserHorlogeServeur() {
                 const chefsRequis = totalOuvriers > 0 ? Math.ceil(totalOuvriers / (cfg.ouvriersParChef || 8)) : 0;
                 const multProdChef = chefsEquipe < chefsRequis ? (1 - (cfg.malusManqueChefPct || 0.20)) : 1.0;
 
-                // Débits par secteur (Excavation, Transport, Traitement, Lavage)
+                const tousEngins = [
+                    ...fleetRes.rows.map(f => ({ ...f, _kind: 'FLEET' })),
+                    ...rentalsRes.rows.map(r => ({ ...r, _kind: 'RENTAL' }))
+                ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 4) - (parseFloat(a.vitesse_reglee_th) || 4));
+
                 const debitsSecteur = {};
                 let conducteursDispo = conducteurs;
                 const reqParEngin = parseInt(cfg.conducteursRequisParEngin) || 2;
 
                 let coutCarburantHoraire = 0;
+                let coutLoyersHoraire = 0;
                 let pannesCount = 0;
                 let sommeUsure = 0;
 
-                // 1. Calcul sur la flotte personnelle
-                for (const engin of fleetRes.rows) {
-                    const affectes = Math.min(reqParEngin, conducteursDispo);
-                    conducteursDispo -= affectes;
-                    const ratioHoraire = affectes / reqParEngin; // 1.0 (24h), 0.5 (12h) ou 0 (arrêt)
-
-                    const vReglee = parseFloat(engin.vitesse_reglee_th) || 45;
-                    const vMax = parseFloat(engin.vitesse_max_th) || 60;
-                    const ratioVitesse = Math.max(0.1, vReglee / vMax);
-
-                    // Usure non-linéaire selon la vitesse réglée (ratioVitesse^1.6)
-                    const usureHoraireBase = (parseFloat(engin.usure_jour) / 24) * heuresEcoulees;
-                    const usureGagnee = usureHoraireBase * Math.pow(ratioVitesse, 1.6) * cadence * ratioHoraire * multUsureMecano * multUsureCadre;
-                    let usureEngin = Math.min(100, parseFloat(engin.usure_actuelle) + usureGagnee);
-
-                    const panne = ratioHoraire > 0 && ((Math.random() * 100 * (24 / heuresEcoulees)) < usureEngin);
-
-                    if (ratioHoraire > 0) {
-                        coutCarburantHoraire += ((parseFloat(engin.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
-                    }
-
-                    if (panne) {
-                        pannesCount += 1;
-                        await client.query(`UPDATE player_fleet SET usure_actuelle = 100, statut = 'EN_PANNE' WHERE id = $1`, [engin.id]);
-                        sommeUsure += 100;
-                    } else {
-                        const sIdx = parseInt(engin.parcelle_index) || 0;
-                        if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
-                        const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
-                        const cat = (engin.categorie || '').toLowerCase();
-                        if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
-                        else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
-                        else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
-                        else debitsSecteur[sIdx].Excavation += debitEffectif;
-
-                        sommeUsure += usureEngin;
-                        await client.query('UPDATE player_fleet SET usure_actuelle = $1 WHERE id = $2', [usureEngin, engin.id]);
-                    }
-                }
-
-                // 2. Calcul sur les engins loués
-                let coutLoyersHoraire = 0;
-                for (const loc of rentalsRes.rows) {
+                for (const item of tousEngins) {
                     const affectes = Math.min(reqParEngin, conducteursDispo);
                     conducteursDispo -= affectes;
                     const ratioHoraire = affectes / reqParEngin;
 
-                    const vReglee = parseFloat(loc.vitesse_reglee_th) || 45;
-                    const vMax = parseFloat(loc.vitesse_max_th) || 60;
+                    const vReglee = parseFloat(item.vitesse_reglee_th) || 3;
+                    const vMax = parseFloat(item.vitesse_max_th) || 5;
                     const ratioVitesse = Math.max(0.1, vReglee / vMax);
 
-                    const loyerHeure = (parseFloat(loc.loyer_jour) / 24) * heuresEcoulees;
-                    coutLoyersHoraire += loyerHeure;
+                    if (item._kind === 'FLEET') {
+                        const usureHoraireBase = (parseFloat(item.usure_jour) / 24) * heuresEcoulees;
+                        const usureGagnee = usureHoraireBase * Math.pow(ratioVitesse, 1.6) * cadence * ratioHoraire * multUsureMecano * multUsureCadre;
+                        const usureEngin = Math.min(100, parseFloat(item.usure_actuelle) + usureGagnee);
 
-                    if (ratioHoraire > 0) {
-                        coutCarburantHoraire += ((parseFloat(loc.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
-                        const sIdx = parseInt(loc.parcelle_index) || 0;
-                        if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
-                        const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
-                        const cat = (loc.categorie || '').toLowerCase();
-                        if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
-                        else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
-                        else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
-                        else debitsSecteur[sIdx].Excavation += debitEffectif;
-                    }
+                        const panne = ratioHoraire > 0 && ((Math.random() * 100 * (24 / heuresEcoulees)) < usureEngin);
 
-                    if (loc.source_type === 'PDG' && loc.owner_id) {
-                        const netProprio = +(loyerHeure * (1 - cfg.commissionLocationPdgPct)).toFixed(2);
-                        await client.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netProprio, loc.owner_id]);
-                        if (loc.fleet_id && ratioHoraire > 0) {
-                            const mult = cfg.usureLocataireMultiplicateur * multUsureMecano * multUsureCadre;
-                            const usureLoc = ((parseFloat(loc.usure_jour) / 24) * heuresEcoulees) * Math.pow(ratioVitesse, 1.6) * mult * ratioHoraire;
-                            await client.query(
-                                'UPDATE player_fleet SET usure_actuelle = LEAST(100, usure_actuelle + $1) WHERE id = $2',
-                                [usureLoc, loc.fleet_id]
-                            );
+                        if (ratioHoraire > 0) {
+                            coutCarburantHoraire += ((parseFloat(item.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
                         }
-                    }
 
-                    // Décompte durée location (en heures -> jours_restants)
-                    if (new Date(loc.created_at).getTime() + (parseInt(loc.jours_restants) * 24 * 3600 * 1000) <= Date.now()) {
-                        if (loc.source_type === 'PDG' && loc.fleet_id) {
-                            await client.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [loc.fleet_id]);
+                        if (panne) {
+                            pannesCount += 1;
+                            await client.query(`UPDATE player_fleet SET usure_actuelle = 100, statut = 'EN_PANNE' WHERE id = $1`, [item.id]);
+                            sommeUsure += 100;
+                        } else {
+                            const sIdx = parseInt(item.parcelle_index) || 0;
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
+                            const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
+                            const cat = (item.categorie || '').toLowerCase();
+                            if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
+                            else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
+                            else debitsSecteur[sIdx].Excavation += debitEffectif;
+
+                            sommeUsure += usureEngin;
+                            await client.query('UPDATE player_fleet SET usure_actuelle = $1 WHERE id = $2', [usureEngin, item.id]);
                         }
-                        await client.query('DELETE FROM active_rentals WHERE id = $1', [loc.id]);
+                    } else {
+                        const loyerHeure = (parseFloat(item.loyer_jour) / 24) * heuresEcoulees;
+                        coutLoyersHoraire += loyerHeure;
+
+                        if (ratioHoraire > 0) {
+                            coutCarburantHoraire += ((parseFloat(item.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
+                            const sIdx = parseInt(item.parcelle_index) || 0;
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
+                            const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
+                            const cat = (item.categorie || '').toLowerCase();
+                            if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
+                            else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
+                            else debitsSecteur[sIdx].Excavation += debitEffectif;
+                        }
+
+                        if (item.source_type === 'PDG' && item.owner_id) {
+                            const netProprio = +(loyerHeure * (1 - cfg.commissionLocationPdgPct)).toFixed(2);
+                            await client.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netProprio, item.owner_id]);
+                            if (item.fleet_id && ratioHoraire > 0) {
+                                const mult = cfg.usureLocataireMultiplicateur * multUsureMecano * multUsureCadre;
+                                const usureLoc = ((parseFloat(item.usure_jour) / 24) * heuresEcoulees) * Math.pow(ratioVitesse, 1.6) * mult * ratioHoraire;
+                                await client.query(
+                                    'UPDATE player_fleet SET usure_actuelle = LEAST(100, usure_actuelle + $1) WHERE id = $2',
+                                    [usureLoc, item.fleet_id]
+                                );
+                            }
+                        }
+
+                        if (new Date(item.created_at).getTime() + (parseInt(item.jours_restants) * 24 * 3600 * 1000) <= Date.now()) {
+                            if (item.source_type === 'PDG' && item.fleet_id) {
+                                await client.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [item.fleet_id]);
+                            }
+                            await client.query('DELETE FROM active_rentals WHERE id = $1', [item.id]);
+                        }
                     }
                 }
 
-                // 3. Production réelle secteur par secteur (Maillon le plus faible + mineurs manuels sur parcelle active)
                 let orProduitTotal = 0;
                 let rocheExtraiteTotale = 0;
 
-                // Bonus Or Pur (Métallurgiste +10% & Trombinoscope complet +15%)
                 let multOr = 1.0;
                 if (hasMetallurgiste) multOr += 0.10;
                 if (trombinoscopeComplet) multOr += (cfg.bonusTrombinoscopeCompletPct || 0.15);
@@ -266,7 +337,6 @@ async function synchroniserHorlogeServeur() {
                     const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
                     const debitChaine = Math.min(d.Excavation, d.Transport, d.Traitement, d.Lavage);
 
-                    // Les mineurs manuels travaillent à la battée sur la parcelle active
                     let prodManuelle = 0;
                     if (idx === parseInt(mine.parcelle_active) && !greve) {
                         prodManuelle = ((mineurs * cfg.prodMineurTonnes) / 24) * heuresEcoulees * cadence * (moral / 100);
@@ -284,7 +354,6 @@ async function synchroniserHorlogeServeur() {
                 orProduitTotal = +orProduitTotal.toFixed(2);
                 const stockOr = parseFloat(mine.stock_or) + orProduitTotal;
 
-                // 4. Cumul des frais horaires dans la facture de la semaine
                 const salairesHoraires = (((mineurs * cfg.salaireMineurJour)
                     + (conducteurs * cfg.salaireConducteurJour)
                     + (mecaniciens * cfg.salaireMecanoJour)
@@ -309,7 +378,7 @@ async function synchroniserHorlogeServeur() {
                      marketing_points = $5, parcelles = $6, pending_event = $7,
                      frais_semaine_accumules = $8, updated_at = NOW()
                      WHERE user_id = $9`,
-                    [stockOr, moral, usureMoyenne, fleetRes.rows.length, marketingPoints, JSON.stringify(parcelles), pendingEvent ? JSON.stringify(pendingEvent) : null, fraisSemaine, mine.user_id]
+                    [stockOr, moral, usureMoyenne, nbTotalPossedes, marketingPoints, JSON.stringify(parcelles), pendingEvent ? JSON.stringify(pendingEvent) : null, fraisSemaine, mine.user_id]
                 );
 
                 if (orProduitTotal > 0 || pannesCount > 0) {
@@ -322,18 +391,21 @@ async function synchroniserHorlogeServeur() {
                 }
             }
 
-            await client.query(`UPDATE market_state SET last_hourly_tick = NOW() WHERE id = 1`);
+            const nouveauTickHeure = new Date(baseTickHeure + heuresEcoulees * msHeure);
+            await client.query(`UPDATE market_state SET last_hourly_tick = $1 WHERE id = 1`, [nouveauTickHeure]);
         }
 
         // C. FACTURE HEBDOMADAIRE (1 FOIS PAR SEMAINE = 7 JOURS)
         const msSemaine = 7 * 24 * 3600 * 1000;
-        const tempsEcouleSemaine = Date.now() - new Date(mkt.last_weekly_tick || mkt.last_hourly_tick).getTime();
+        const baseTickSemaine = new Date(mkt.last_weekly_tick || mkt.last_hourly_tick).getTime();
+        const tempsEcouleSemaine = Date.now() - baseTickSemaine;
 
         if (tempsEcouleSemaine >= msSemaine) {
             const resMinesWeek = await client.query(`
                 SELECT m.user_id, m.jour, m.frais_semaine_accumules, m.facture_en_attente, u.username
                 FROM mines m JOIN users u ON u.id = m.user_id
                 WHERE u.is_banned = FALSE
+                FOR UPDATE OF m
             `);
 
             for (const mw of resMinesWeek.rows) {
