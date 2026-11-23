@@ -17,7 +17,8 @@ async function chargerModuleMateriel() {
 function afficherSousOngletMateriel(subId, btn) {
     document.querySelectorAll('.eq-subtab').forEach(el => el.style.display = 'none');
     document.querySelectorAll('.eq-subnav-btn').forEach(b => b.classList.remove('yellow'));
-    document.getElementById(subId).style.display = 'block';
+    const target = document.getElementById(subId);
+    if (target) target.style.display = 'block';
     if (btn) btn.classList.add('yellow');
 }
 
@@ -41,8 +42,8 @@ function rendreMaFlotte() {
 
             const actions = f.statut === 'ACTIF' ? `
                 <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%)</button>
-                <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id}, '${f.nom.replace(/'/g, "\\'")}')">🏷️ Vendre</button>
-                <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id}, '${f.nom.replace(/'/g, "\\'")}')">🤝 Louer</button>
+                <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
+                <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
             ` : '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
 
             return `
@@ -58,7 +59,6 @@ function rendreMaFlotte() {
         }).join('');
     }
 
-    // Locations en cours (engins loués par le joueur)
     const locTbody = document.getElementById('eq-my-rentals-tbody');
     if (locTbody) {
         if (eqData.myActiveRentals.length === 0) {
@@ -188,66 +188,6 @@ async function acheterEnginNeuf(catalogId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ catalogId })
-    });
-    const data = await res.json();
-    alert(data.message || data.error);
-    chargerModuleMateriel();
-    if (typeof rafraichirJeu === 'function') rafraichirJeu();
-}
-
-async function reviserEngin(fleetId) {
-    const res = await fetch('/api/equipment/repair', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fleetId })
-    });
-    const data = await res.json();
-    alert(data.message || data.error);
-    chargerModuleMateriel();
-    if (typeof rafraichirJeu === 'function') rafraichirJeu();
-}
-
-async function ouvrirVenteEngin(fleetId, nom) {
-    const choix = prompt(`Vendre "${nom}" :\nTapez 1 pour Vente Directe (Brocante)\nTapez 2 pour Enchères`, '2');
-    if (!choix) return;
-    const modeVente = choix === '1' ? 'BROCANTE' : 'ENCHERE';
-    const prixDepart = prompt('Prix de vente ou mise à prix (€) :', '3500');
-    if (!prixDepart) return;
-    const dureeHeures = prompt('Durée de l’annonce en heures (1 à 168h = 7 jours max) :', '24');
-    if (!dureeHeures) return;
-
-    const res = await fetch('/api/equipment/list-sale', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fleetId, modeVente, prixDepart, dureeHeures })
-    });
-    const data = await res.json();
-    alert(data.message || data.error);
-    chargerModuleMateriel();
-}
-
-async function encherirOuAcheter(auctionId, montantOffre) {
-    const res = await fetch('/api/equipment/bid', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ auctionId, montantOffre })
-    });
-    const data = await res.json();
-    alert(data.message || data.error);
-    chargerModuleMateriel();
-    if (typeof rafraichirJeu === 'function') rafraichirJeu();
-}
-
-async function ouvrirLocationEngin(fleetId, nom) {
-    const loyerJour = prompt(`Proposer "${nom}" en location aux autres PDG.\nLoyer journalier souhaité (€/jour) :`, '400');
-    if (!loyerJour) return;
-    const dureeJours = prompt('Durée du contrat de location (1 à 7 jours max) :', '3');
-    if (!dureeJours) return;
-
-    const res = await fetch('/api/equipment/offer-rental', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fleetId, loyerJour, dureeJours })
     });
     const data = await res.json();
     alert(data.message || data.error);
