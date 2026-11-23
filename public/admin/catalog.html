@@ -13,7 +13,6 @@
     <a href="/admin/index.html" class="item">👥 PDG & Comptes</a>
     <a href="/admin/settings.html" class="item">⚙️ Variables</a>
     <a class="active item" href="/admin/catalog.html">🚜 Catalogues</a>
-    <a class="item" href="/admin/clients.html">🤝 Clients</a>
     <a class="item" href="/admin/texts.html">📝 Textes</a>
     <a href="/admin/logs.html" class="item">📜 Logs</a>
     <div class="right menu">
@@ -63,8 +62,7 @@
             <thead>
                 <tr>
                     <th>Modèle</th>
-                    <th>Famille</th>
-                    <th>Gabarit</th>
+                    <th>Famille & Gabarit</th>
                     <th>Prix Neuf</th>
                     <th>Extraction</th>
                     <th>Carburant</th>
@@ -80,6 +78,13 @@
     <!-- 2. CATALOGUE DES CLIENTS ACHETEURS -->
     <div class="ui segment mine-card">
         <h3 class="ui dividing header mine-header">🤝 Catalogue des Clients Acheteurs</h3>
+        <div class="ui inverted segment" style="margin-bottom: 16px;">
+            <strong style="color:#34d399; display:block; margin-bottom:6px;">📥 Import rapide en masse (1 client par ligne : <code>nom ; type ; secteur ; min_gr ; max_gr ; bonus_min ; bonus_max ; poids</code>)</strong>
+            <textarea id="bulk-cli-text" rows="5" style="width:100%; background:#141210; color:#f5f5f4; border:1px solid #57534e; border-radius:6px; padding:10px; font-family:monospace; font-size:0.88em;" placeholder="Joaillerie Place Vendôme ; Entreprise ; Luxe & Horlogerie ; 50 ; 250 ; 0.04 ; 0.12 ; 20"></textarea>
+            <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                <button class="ui green button" onclick="importerClientsEnMasse()">📥 Importer tous les clients d'un coup</button>
+            </div>
+        </div>
         <div style="display:grid; grid-template-columns: 1.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.6fr auto; gap:6px; margin-bottom:14px;">
             <input type="text" id="new-cli-nom" placeholder="Nom client">
             <select id="new-cli-type">
@@ -134,8 +139,12 @@ async function chargerCatalogueEngins() {
     document.getElementById('admin-equipment-catalog').innerHTML = currentEqList.map(e => `
         <tr>
             <td><strong>${e.nom}</strong></td>
-            <td><span class="ui blue label">${e.categorie}</span></td>
-            <td><span class="ui yellow label">${e.gabarit || 'Moyen'}</span></td>
+            <td style="white-space:nowrap;">
+                <div style="display:inline-flex; align-items:center; gap:0;">
+                    <span class="ui blue label" style="min-width:96px; text-align:center; margin:0; border-radius:4px 0 0 4px;">${e.categorie}</span>
+                    <span class="ui yellow label" style="min-width:62px; text-align:center; margin:0; border-radius:0 4px 4px 0;">${e.gabarit || 'Moyen'}</span>
+                </div>
+            </td>
             <td class="money-text">${Math.round(e.prix_neuf).toLocaleString()} €</td>
             <td><strong>${e.vitesse_min_th || 30} à ${e.vitesse_max_th || 60} t/h</strong></td>
             <td>${e.carburant_jour} €/j</td>
@@ -228,6 +237,39 @@ async function chargerCatalogueClients() {
             <td><button class="ui red mini button" onclick="supprimerClientCatalogue(${c.id})">Supprimer</button></td>
         </tr>
     `).join('');
+}
+
+async function importerClientsEnMasse() {
+    const raw = document.getElementById('bulk-cli-text').value.trim();
+    if (!raw) return notifAdmin('Collez au moins une ligne de client.', true);
+
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const items = [];
+    for (const line of lines) {
+        const p = line.split(';').map(x => x.trim());
+        if (p.length >= 8) {
+            items.push({
+                nom: p.at(0), type_client: p.at(1), secteur: p.at(2),
+                min_gr: p.at(3), max_gr: p.at(4), bonus_min: p.at(5),
+                bonus_max: p.at(6), poids_apparition: p.at(7)
+            });
+        }
+    }
+    if (items.length === 0) return notifAdmin('Format invalide (8 colonnes séparées par ; requises).', true);
+
+    const res = await fetch('/api/admin/clients-catalog-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+    });
+    const data = await res.json();
+    if (data.success) {
+        document.getElementById('bulk-cli-text').value = '';
+        notifAdmin(`✅ ${data.count} clients importés avec succès !`);
+        chargerCatalogueClients();
+    } else {
+        notifAdmin(data.error || 'Erreur lors de l’import des clients.', true);
+    }
 }
 
 async function ajouterClientCatalogue() {
