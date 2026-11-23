@@ -13,7 +13,7 @@ const authRoutes = require('./routes/authRoutes');
 const gameRoutes = require('./routes/gameRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
-
+const { router: hrRoutes } = require('./routes/hrRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 let isMaintenance = true;
@@ -63,6 +63,7 @@ app.use('/api', (req, res, next) => {
 
 app.use('/api/game', gameRoutes);
 app.use('/api/equipment', equipmentRoutes);
+app.use('/api/hr', hrRoutes);
 
 async function startServer() {
     try {

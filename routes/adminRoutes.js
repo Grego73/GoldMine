@@ -76,6 +76,38 @@ router.post('/settings', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
+router.post('/settings-bulk', requireAdmin, async (req, res) => {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Aucune donnée valide à importer.' });
+    }
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        let count = 0;
+        for (const item of items) {
+            if (!item.key || !item.label || isNaN(parseFloat(item.value))) continue;
+            await client.query(
+                `INSERT INTO game_settings (key, value, label) VALUES ($1, $2, $3)
+                 ON CONFLICT (key) DO UPDATE SET value = $2, label = $3`,
+                [item.key.trim(), parseFloat(item.value), item.label.trim()]
+            );
+            count += 1;
+        }
+        await client.query('COMMIT');
+        await logAdmin(req.adminUsername, `Import massif de ${count} variables d'équilibrage`);
+        await loadGameConfig();
+        res.json({ success: true, count });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Erreur settings-bulk :', err);
+        res.status(500).json({ error: 'Erreur lors de l’import en masse' });
+    } finally {
+        client.release();
+    }
+});
+
 // 3. GESTION DU CATALOGUE DES ENGINS NEUFS (BOUTIQUE & LOCATION)
 router.get('/equipment-catalog', requireAdmin, async (req, res) => {
     const result = await pool.query('SELECT * FROM equipment_catalog ORDER BY prix_neuf ASC');

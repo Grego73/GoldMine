@@ -25,15 +25,28 @@
     <div id="admin-notif" class="ui message" style="display:none;"></div>
 
     <div class="ui segment mine-card">
-        <h3 class="ui dividing header mine-header">⚙️ Variables d'Équilibrage en Temps Réel</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+            <h3 class="ui header mine-header" style="margin:0; border:none;">⚙️ Variables d'Équilibrage en Temps Réel</h3>
+            <button class="ui blue mini button" onclick="exporterVariables()">📤 Exporter toute la liste (copie)</button>
+        </div>
 
+        <!-- IMPORT EN MASSE PAR COPIER-COLLER -->
         <div class="ui inverted segment" style="margin-bottom: 20px;">
-            <strong style="color:#fbbf24; display:block; margin-bottom:8px;">+ Ajouter une nouvelle variable en base de données</strong>
+            <strong style="color:#34d399; display:block; margin-bottom:6px;">📥 Import rapide en masse (1 variable par ligne : <code>cle ; libelle ; valeur</code>)</strong>
+            <textarea id="bulk-settings-text" rows="5" style="width:100%; background:#141210; color:#f5f5f4; border:1px solid #57534e; border-radius:6px; padding:10px; font-family:monospace; font-size:0.9em;" placeholder="conducteursRequisParEngin ; Conducteurs requis par engin ; 2&#10;enginsParMecano ; Engins par mécanicien ; 3"></textarea>
+            <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                <button class="ui green button" onclick="importerEnMasse()">📥 Importer toutes les lignes d'un coup</button>
+            </div>
+        </div>
+
+        <!-- AJOUT UNITAIRE -->
+        <div class="ui inverted segment" style="margin-bottom: 20px;">
+            <strong style="color:#fbbf24; display:block; margin-bottom:8px;">+ Ajouter une variable unitaire</strong>
             <div style="display:grid; grid-template-columns: 1fr 1.5fr 0.8fr auto; gap:8px;">
-                <input type="text" id="new-setting-key" placeholder="Clé (ex: dureeMaxLocationJours)">
-                <input type="text" id="new-setting-label" placeholder="Libellé (ex: Durée max location jours)">
-                <input type="number" step="any" id="new-setting-val" placeholder="Valeur (ex: 7)">
-                <button class="ui green button" onclick="creerParametre()">+ Créer</button>
+                <input type="text" id="new-setting-key" placeholder="Clé">
+                <input type="text" id="new-setting-label" placeholder="Libellé">
+                <input type="number" step="any" id="new-setting-val" placeholder="Valeur">
+                <button class="ui yellow button" onclick="creerParametre()">+ Créer</button>
             </div>
         </div>
 
@@ -43,12 +56,14 @@
 
 <script src="/js/version.js"></script>
 <script>
+let currentSettingsList = [];
+
 function notifAdmin(msg, isError = false) {
     const box = document.getElementById('admin-notif');
     box.className = isError ? 'ui red message' : 'ui green message';
     box.innerText = msg;
     box.style.display = 'block';
-    setTimeout(() => { box.style.display = 'none'; }, 3500);
+    setTimeout(() => { box.style.display = 'none'; }, 4000);
 }
 
 async function chargerParametres() {
@@ -57,19 +72,58 @@ async function chargerParametres() {
         window.location.href = '/game.html';
         return;
     }
-    const settings = await res.json();
+    currentSettingsList = await res.json();
     const grid = document.getElementById('admin-settings-grid');
 
-    grid.innerHTML = settings.map(s => `
+    grid.innerHTML = currentSettingsList.map(s => `
         <div class="ui inverted segment">
             <div style="font-size:0.85em; color:#a8a29e; margin-bottom:4px;"><code>${s.key}</code></div>
             <label style="display:block; color:#fbbf24; font-weight:bold; margin-bottom:8px;">${s.label}</label>
             <div class="ui action input" style="width:100%;">
                 <input type="number" step="any" id="set-${s.key}" value="${s.value}">
-                <button class="ui yellow button" onclick="sauverParametre('${s.key}')">Enregistrer</button>
+                <button class="ui yellow button" onclick="sauverParametre('${s.key}')">OK</button>
             </div>
         </div>
     `).join('');
+}
+
+async function importerEnMasse() {
+    const raw = document.getElementById('bulk-settings-text').value.trim();
+    if (!raw) return notifAdmin('Collez au moins une ligne dans la zone de texte.', true);
+
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const items = [];
+
+    for (const line of lines) {
+        const parts = line.split(';').map(p => p.trim());
+        if (parts.length >= 3) {
+            items.push({ key: parts.at(0), label: parts.at(1), value: parts.at(2) });
+        }
+    }
+
+    if (items.length === 0) {
+        return notifAdmin('Format invalide. Utilisez : cle ; libelle ; valeur', true);
+    }
+
+    const res = await fetch('/api/admin/settings-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+    });
+    const data = await res.json();
+    if (data.success) {
+        document.getElementById('bulk-settings-text').value = '';
+        notifAdmin(`✅ ${data.count} variables importées / mises à jour d'un coup !`);
+        chargerParametres();
+    } else {
+        notifAdmin(data.error || 'Erreur import', true);
+    }
+}
+
+function exporterVariables() {
+    const txt = currentSettingsList.map(s => `${s.key} ; ${s.label} ; ${s.value}`).join('\n');
+    document.getElementById('bulk-settings-text').value = txt;
+    notifAdmin('📤 Toutes les variables actuelles ont été extraites dans la zone ci-dessus !');
 }
 
 async function sauverParametre(key) {

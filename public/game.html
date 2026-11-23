@@ -13,6 +13,7 @@
         <span style="font-weight:900; color:#fbbf24; font-size:1.1em; margin-right:10px; white-space:nowrap;">⛏️ GOLD MINE</span>
         <a class="item active" onclick="changerOnglet('mine', this)">🏭 Fosse & Équipe</a>
         <a class="item" id="nav-materiel" onclick="changerOnglet('materiel', this); chargerModuleMateriel();">🚜 Matériel</a>
+        <a class="item" id="nav-rh" onclick="changerOnglet('rh', this); chargerModuleRH();">👔 RH & Direction</a>
         <a class="item" onclick="changerOnglet('prospection', this)">🗺️ Prospection</a>
         <a class="item" onclick="changerOnglet('marche', this)">📈 Bourse & Clients</a>
         <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
@@ -175,6 +176,22 @@
             </div>
         </div>
     </div>
+    <!-- ONGLET RH & TROMBINOSCOPE DE DIRECTION -->
+    <div id="tab-rh" class="tab-section" style="display:none;">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">👷 Équipes Techniques & Ratios d'Exploitation</h3>
+            <p style="color:#d6d3d1; margin-bottom:14px;">
+                Chaque engin tourne <strong>24h/24</strong> (2 postes de 12h) et nécessite <strong>2 conducteurs</strong>. Prévoyez également <strong>1 mécanicien pour 3 engins</strong> et <strong>1 chef d'équipe par tranche de 8 ouvriers</strong>.
+            </p>
+            <div id="hr-workers-grid" class="ui three column grid"></div>
+        </div>
+
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🏛️ Trombinoscope de Direction (6 Cadres Clés)</h3>
+            <div id="hr-trombi-status" style="margin-bottom:16px;"></div>
+            <div id="hr-trombi-grid" class="ui three column grid"></div>
+        </div>
+    </div>
 
     <!-- ONGLET 3 : PROSPECTION -->
     <div id="tab-prospection" class="tab-section" style="display:none;">
@@ -241,6 +258,7 @@
     </div>
 </div>
 
+<script src="/js/hr.js"></script>
 <script src="/js/version.js"></script>
 <script src="/js/main.js"></script>
 <script src="/js/equipment.js"></script>
