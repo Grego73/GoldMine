@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Variables d'Équilibrage</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="ui menu mine-nav">
+    <div class="header item">🛡️ ADMIN GOLD MINE</div>
+    <a href="/admin/index.html" class="item">👥 PDG & Comptes</a>
+    <a href="/admin/settings.html" class="item active">⚙️ Variables</a>
+    <a href="/admin/catalog.html" class="item">🚜 Catalogues</a>
+    <a href="/admin/texts.html" class="item">📝 Textes</a>
+    <a href="/admin/logs.html" class="item">📜 Logs</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label" style="margin-right:8px;"></span>
+        <a href="/game.html" class="item">⛏️ Retour Mine</a>
+    </div>
+</div>
+
+<div class="ui container" style="margin-top: 25px;">
+    <div id="admin-notif" class="ui message" style="display:none;"></div>
+
+    <div class="ui segment mine-card">
+        <h3 class="ui dividing header mine-header">⚙️ Variables d'Équilibrage en Temps Réel</h3>
+
+        <div class="ui inverted segment" style="margin-bottom: 20px;">
+            <strong style="color:#fbbf24; display:block; margin-bottom:8px;">+ Ajouter une nouvelle variable en base de données</strong>
+            <div style="display:grid; grid-template-columns: 1fr 1.5fr 0.8fr auto; gap:8px;">
+                <input type="text" id="new-setting-key" placeholder="Clé (ex: dureeMaxLocationJours)">
+                <input type="text" id="new-setting-label" placeholder="Libellé (ex: Durée max location jours)">
+                <input type="number" step="any" id="new-setting-val" placeholder="Valeur (ex: 7)">
+                <button class="ui green button" onclick="creerParametre()">+ Créer</button>
+            </div>
+        </div>
+
+        <div id="admin-settings-grid" class="ui three column grid"></div>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script>
+function notifAdmin(msg, isError = false) {
+    const box = document.getElementById('admin-notif');
+    box.className = isError ? 'ui red message' : 'ui green message';
+    box.innerText = msg;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 3500);
+}
+
+async function chargerParametres() {
+    const res = await fetch('/api/admin/settings');
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/game.html';
+        return;
+    }
+    const settings = await res.json();
+    const grid = document.getElementById('admin-settings-grid');
+
+    grid.innerHTML = settings.map(s => `
+        <div class="ui inverted segment">
+            <div style="font-size:0.85em; color:#a8a29e; margin-bottom:4px;"><code>${s.key}</code></div>
+            <label style="display:block; color:#fbbf24; font-weight:bold; margin-bottom:8px;">${s.label}</label>
+            <div class="ui action input" style="width:100%;">
+                <input type="number" step="any" id="set-${s.key}" value="${s.value}">
+                <button class="ui yellow button" onclick="sauverParametre('${s.key}')">Enregistrer</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function sauverParametre(key) {
+    const value = document.getElementById('set-' + key).value;
+    await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, value })
+    });
+    notifAdmin(`Variable "${key}" mise à jour !`);
+}
+
+async function creerParametre() {
+    const key = document.getElementById('new-setting-key').value.trim();
+    const label = document.getElementById('new-setting-label').value.trim();
+    const value = document.getElementById('new-setting-val').value;
+    if (!key || !label || value === '') return notifAdmin('Tous les champs sont requis.', true);
+
+    await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, label, value })
+    });
+    document.getElementById('new-setting-key').value = '';
+    document.getElementById('new-setting-label').value = '';
+    document.getElementById('new-setting-val').value = '';
+    notifAdmin(`Variable "${key}" créée en base !`);
+    chargerParametres();
+}
+
+chargerParametres();
+</script>
+</body>
+</html>

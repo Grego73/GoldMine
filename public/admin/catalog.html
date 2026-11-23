@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Catalogues Engins & Clients</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="ui menu mine-nav">
+    <div class="header item">🛡️ ADMIN GOLD MINE</div>
+    <a href="/admin/index.html" class="item">👥 PDG & Comptes</a>
+    <a href="/admin/settings.html" class="item">⚙️ Variables</a>
+    <a href="/admin/catalog.html" class="item active">🚜 Catalogues</a>
+    <a href="/admin/texts.html" class="item">📝 Textes</a>
+    <a href="/admin/logs.html" class="item">📜 Logs</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label" style="margin-right:8px;"></span>
+        <a href="/game.html" class="item">⛏️ Retour Mine</a>
+    </div>
+</div>
+
+<div class="ui container" style="margin-top: 25px;">
+    <div id="admin-notif" class="ui message" style="display:none;"></div>
+
+    <!-- 1. CATALOGUE DES ENGINS NEUFS -->
+    <div class="ui segment mine-card">
+        <h3 class="ui dividing header mine-header">🚜 Catalogue des Engins Neufs (Boutique & Location)</h3>
+        <div style="display:grid; grid-template-columns: 1.5fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr auto; gap:8px; margin-bottom:14px;">
+            <input type="text" id="new-eq-nom" placeholder="Nom engin">
+            <input type="text" id="new-eq-cat" placeholder="Catégorie">
+            <input type="number" id="new-eq-prix" placeholder="Prix €">
+            <input type="number" id="new-eq-prod" placeholder="Prod t/j">
+            <input type="number" id="new-eq-carb" placeholder="Carb €/j">
+            <input type="number" step="any" id="new-eq-usure" placeholder="Usure %/j">
+            <button class="ui green button" onclick="ajouterEnginCatalogue()">+ Ajouter</button>
+        </div>
+        <table class="ui table">
+            <thead>
+                <tr>
+                    <th>Modèle</th>
+                    <th>Catégorie</th>
+                    <th>Prix Neuf</th>
+                    <th>Extraction</th>
+                    <th>Carburant</th>
+                    <th>Usure/j</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="admin-equipment-catalog"></tbody>
+        </table>
+    </div>
+
+    <!-- 2. CATALOGUE DES CLIENTS ACHETEURS -->
+    <div class="ui segment mine-card">
+        <h3 class="ui dividing header mine-header">🤝 Catalogue des Clients Acheteurs</h3>
+        <div style="display:grid; grid-template-columns: 1.5fr 1fr 1fr 0.7fr 0.7fr 0.7fr 0.7fr 0.6fr auto; gap:6px; margin-bottom:14px;">
+            <input type="text" id="new-cli-nom" placeholder="Nom client">
+            <select id="new-cli-type">
+                <option value="Particulier">Particulier</option>
+                <option value="Entreprise" selected>Entreprise</option>
+                <option value="Événementiel">Événementiel</option>
+            </select>
+            <input type="text" id="new-cli-secteur" placeholder="Secteur">
+            <input type="number" id="new-cli-min" placeholder="Min g">
+            <input type="number" id="new-cli-max" placeholder="Max g">
+            <input type="number" step="0.01" id="new-cli-bmin" placeholder="Bonus min">
+            <input type="number" step="0.01" id="new-cli-bmax" placeholder="Bonus max">
+            <input type="number" id="new-cli-poids" placeholder="Poids" value="10">
+            <button class="ui green button" onclick="ajouterClientCatalogue()">+ Ajouter</button>
+        </div>
+        <table class="ui table">
+            <thead>
+                <tr>
+                    <th>Client</th>
+                    <th>Type</th>
+                    <th>Secteur</th>
+                    <th>Demande (g)</th>
+                    <th>Bonus Prix</th>
+                    <th>Poids</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="admin-clients-catalog"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script>
+function notifAdmin(msg, isError = false) {
+    const box = document.getElementById('admin-notif');
+    box.className = isError ? 'ui red message' : 'ui green message';
+    box.innerText = msg;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 3500);
+}
+
+// --- ENGINS NEUFS ---
+async function chargerCatalogueEngins() {
+    const res = await fetch('/api/admin/equipment-catalog');
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/game.html';
+        return;
+    }
+    const list = await res.json();
+    document.getElementById('admin-equipment-catalog').innerHTML = list.map(e => `
+        <tr>
+            <td><strong>${e.nom}</strong></td>
+            <td><span class="ui blue label">${e.categorie}</span></td>
+            <td class="money-text">${Math.round(e.prix_neuf).toLocaleString()} €</td>
+            <td>${e.prod_tonnes} t/j</td>
+            <td>${e.carburant_jour} €/j</td>
+            <td>${e.usure_jour}% /j</td>
+            <td><button class="ui red mini button" onclick="supprimerEnginCatalogue(${e.id})">Supprimer</button></td>
+        </tr>
+    `).join('');
+}
+
+async function ajouterEnginCatalogue() {
+    const body = {
+        nom: document.getElementById('new-eq-nom').value,
+        categorie: document.getElementById('new-eq-cat').value,
+        prix_neuf: parseFloat(document.getElementById('new-eq-prix').value),
+        prod_tonnes: parseFloat(document.getElementById('new-eq-prod').value),
+        carburant_jour: parseFloat(document.getElementById('new-eq-carb').value),
+        usure_jour: parseFloat(document.getElementById('new-eq-usure').value)
+    };
+    if (!body.nom || !body.categorie || isNaN(body.prix_neuf)) {
+        return notifAdmin('Veuillez remplir tous les champs de l’engin.', true);
+    }
+    await fetch('/api/admin/equipment-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    document.getElementById('new-eq-nom').value = '';
+    notifAdmin('Engin ajouté au catalogue !');
+    chargerCatalogueEngins();
+}
+
+async function supprimerEnginCatalogue(id) {
+    await fetch('/api/admin/equipment-catalog/' + id, { method: 'DELETE' });
+    notifAdmin('Engin supprimé du catalogue.');
+    chargerCatalogueEngins();
+}
+
+// --- CLIENTS ACHETEURS ---
+async function chargerCatalogueClients() {
+    const res = await fetch('/api/admin/clients-catalog');
+    if (!res.ok) return;
+    const list = await res.json();
+    document.getElementById('admin-clients-catalog').innerHTML = list.map(c => `
+        <tr>
+            <td><strong>${c.nom}</strong></td>
+            <td><span class="ui blue label">${c.type_client}</span></td>
+            <td>${c.secteur}</td>
+            <td>${c.min_gr} - ${c.max_gr} g</td>
+            <td>${Math.round(c.bonus_min * 100)}% à +${Math.round(c.bonus_max * 100)}%</td>
+            <td>${c.poids_apparition}</td>
+            <td><button class="ui red mini button" onclick="supprimerClientCatalogue(${c.id})">Supprimer</button></td>
+        </tr>
+    `).join('');
+}
+
+async function ajouterClientCatalogue() {
+    const body = {
+        nom: document.getElementById('new-cli-nom').value,
+        type_client: document.getElementById('new-cli-type').value,
+        secteur: document.getElementById('new-cli-secteur').value,
+        min_gr: parseFloat(document.getElementById('new-cli-min').value),
+        max_gr: parseFloat(document.getElementById('new-cli-max').value),
+        bonus_min: parseFloat(document.getElementById('new-cli-bmin').value),
+        bonus_max: parseFloat(document.getElementById('new-cli-bmax').value),
+        poids_apparition: parseInt(document.getElementById('new-cli-poids').value) || 10
+    };
+    if (!body.nom || !body.secteur || isNaN(body.min_gr)) {
+        return notifAdmin('Veuillez remplir les champs obligatoires du client.', true);
+    }
+    await fetch('/api/admin/clients-catalog', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    document.getElementById('new-cli-nom').value = '';
+    notifAdmin('Client ajouté au catalogue !');
+    chargerCatalogueClients();
+}
+
+async function supprimerClientCatalogue(id) {
+    await fetch('/api/admin/clients-catalog/' + id, { method: 'DELETE' });
+    notifAdmin('Client supprimé.');
+    chargerCatalogueClients();
+}
+
+chargerCatalogueEngins();
+chargerCatalogueClients();
+</script>
+</body>
+</html>

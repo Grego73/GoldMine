@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Textes Éditables</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="ui menu mine-nav">
+    <div class="header item">🛡️ ADMIN GOLD MINE</div>
+    <a href="/admin/index.html" class="item">👥 PDG & Comptes</a>
+    <a href="/admin/settings.html" class="item">⚙️ Variables</a>
+    <a href="/admin/catalog.html" class="item">🚜 Catalogues</a>
+    <a href="/admin/texts.html" class="item active">📝 Textes</a>
+    <a href="/admin/logs.html" class="item">📜 Logs</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label" style="margin-right:8px;"></span>
+        <a href="/game.html" class="item">⛏️ Retour Mine</a>
+    </div>
+</div>
+
+<div class="ui container" style="margin-top: 25px;">
+    <div id="admin-notif" class="ui message" style="display:none;"></div>
+
+    <div class="ui segment mine-card">
+        <h3 class="ui dividing header mine-header">📝 Textes Éditables du Site</h3>
+        <div id="admin-texts-list"></div>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script>
+function notifAdmin(msg, isError = false) {
+    const box = document.getElementById('admin-notif');
+    box.className = isError ? 'ui red message' : 'ui green message';
+    box.innerText = msg;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 3500);
+}
+
+async function chargerTextes() {
+    const res = await fetch('/api/admin/texts');
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/game.html';
+        return;
+    }
+    const texts = await res.json();
+    document.getElementById('admin-texts-list').innerHTML = texts.map(t => `
+        <div class="ui inverted segment" style="margin-bottom:14px;">
+            <div style="font-size:0.85em; color:#a8a29e; margin-bottom:6px;">Bloc : <code>${t.key}</code></div>
+            <div class="ui form">
+                <div class="field">
+                    <label>Titre</label>
+                    <input type="text" id="txt-title-${t.key}" value="${t.title}">
+                </div>
+                <div class="field">
+                    <label>Contenu</label>
+                    <textarea rows="3" id="txt-content-${t.key}">${t.content}</textarea>
+                </div>
+                <button class="ui yellow button" onclick="sauverTexte('${t.key}')">💾 Enregistrer ce texte</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+async function sauverTexte(key) {
+    const title = document.getElementById('txt-title-' + key).value;
+    const content = document.getElementById('txt-content-' + key).value;
+    await fetch('/api/admin/texts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key, title, content })
+    });
+    notifAdmin(`Texte "${key}" mis à jour !`);
+}
+
+chargerTextes();
+</script>
+</body>
+</html>

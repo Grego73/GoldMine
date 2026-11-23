@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Logs & Journaux</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="ui menu mine-nav">
+    <div class="header item">🛡️ ADMIN GOLD MINE</div>
+    <a href="/admin/index.html" class="item">👥 PDG & Comptes</a>
+    <a href="/admin/settings.html" class="item">⚙️ Variables</a>
+    <a href="/admin/catalog.html" class="item">🚜 Catalogues</a>
+    <a href="/admin/texts.html" class="item">📝 Textes</a>
+    <a href="/admin/logs.html" class="item active">📜 Logs</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label" style="margin-right:8px;"></span>
+        <a href="/game.html" class="item">⛏️ Retour Mine</a>
+    </div>
+</div>
+
+<div class="ui container" style="margin-top: 25px;">
+    <div class="ui two column grid">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">📜 Logs d'Activité Joueurs</h3>
+            <div class="ui action input" style="margin-bottom:12px;">
+                <input type="text" id="filter-player-logs" placeholder="Filtrer par pseudo PDG...">
+                <button class="ui blue button" onclick="chargerLogsJoueurs()">Filtrer</button>
+            </div>
+            <div id="admin-player-logs" style="max-height:480px; overflow-y:auto; font-size:0.9em;"></div>
+        </div>
+
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🔒 Journal des Actions Admin</h3>
+            <div id="admin-logs-list" style="max-height:520px; overflow-y:auto; font-size:0.9em;"></div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script>
+async function chargerLogsJoueurs() {
+    const username = document.getElementById('filter-player-logs').value.trim();
+    const res = await fetch('/api/admin/player-logs?username=' + encodeURIComponent(username));
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/game.html';
+        return;
+    }
+    const logs = await res.json();
+    document.getElementById('admin-player-logs').innerHTML = logs.map(l => {
+        const d = new Date(l.created_at).toLocaleString('fr-FR');
+        return `<div style="padding:6px 0; border-bottom:1px solid #292524;">
+            <span style="color:#a8a29e;">[${d}]</span> <strong style="color:#fbbf24;">${l.username}</strong> (${l.category}) : ${l.details}
+        </div>`;
+    }).join('');
+}
+
+async function chargerLogsAdmin() {
+    const res = await fetch('/api/admin/logs');
+    if (!res.ok) return;
+    const logs = await res.json();
+    document.getElementById('admin-logs-list').innerHTML = logs.map(l => {
+        const d = new Date(l.created_at).toLocaleString('fr-FR');
+        return `<div style="padding:6px 0; border-bottom:1px solid #292524;">
+            <span style="color:#a8a29e;">[${d}]</span> <strong style="color:#34d399;">${l.admin_username}</strong> : ${l.action}
+        </div>`;
+    }).join('');
+}
+
+chargerLogsJoueurs();
+chargerLogsAdmin();
+</script>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin — Gestion des PDG</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+
+<div class="ui menu mine-nav">
+    <div class="header item">🛡️ ADMIN GOLD MINE</div>
+    <a href="/admin/index.html" class="item active">👥 PDG & Comptes</a>
+    <a href="/admin/settings.html" class="item">⚙️ Variables</a>
+    <a href="/admin/catalog.html" class="item">🚜 Catalogues</a>
+    <a href="/admin/texts.html" class="item">📝 Textes</a>
+    <a href="/admin/logs.html" class="item">📜 Logs</a>
+    <div class="right menu">
+        <span id="app-version" class="ui label" style="margin-right:8px;"></span>
+        <a href="/game.html" class="item">⛏️ Retour Mine</a>
+    </div>
+</div>
+
+<div class="ui container" style="margin-top: 25px;">
+    <div id="admin-notif" class="ui message" style="display:none;"></div>
+
+    <div class="ui segment mine-card">
+        <h3 class="ui dividing header mine-header">👥 Gestion des PDG & Comptes</h3>
+        <table class="ui table">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>PDG</th>
+                    <th>Email</th>
+                    <th>Vérifié</th>
+                    <th>Jour</th>
+                    <th>Trésorerie</th>
+                    <th>Or (g)</th>
+                    <th>Engins</th>
+                    <th>Statut</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="admin-users-tbody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="/js/version.js"></script>
+<script>
+function notifAdmin(msg, isError = false) {
+    const box = document.getElementById('admin-notif');
+    box.className = isError ? 'ui red message' : 'ui green message';
+    box.innerText = msg;
+    box.style.display = 'block';
+    setTimeout(() => { box.style.display = 'none'; }, 3500);
+}
+
+async function chargerJoueurs() {
+    const res = await fetch('/api/admin/users');
+    if (res.status === 401 || res.status === 403) {
+        window.location.href = '/game.html';
+        return;
+    }
+    const users = await res.json();
+    document.getElementById('admin-users-tbody').innerHTML = users.map(u => `
+        <tr>
+            <td>#${u.id}</td>
+            <td><strong>${u.username}</strong> ${u.role === 'admin' ? '<span class="ui orange label">ADMIN</span>' : ''}</td>
+            <td>${u.email}</td>
+            <td>${u.is_verified ? '✅' : '⏳'}</td>
+            <td>J${u.jour || 1}</td>
+            <td class="money-text">${Math.round(u.argent || 0).toLocaleString()} €</td>
+            <td class="gold-text">${Math.round(u.stock_or || 0).toLocaleString()} g</td>
+            <td>${u.foreuses || 0}</td>
+            <td>${u.is_banned ? '<span class="ui red label">Banni</span>' : '<span class="ui green label">Actif</span>'}</td>
+            <td>
+                <button class="ui mini green button" onclick="donnerArgent(${u.id})">+/- €</button>
+                <button class="ui mini red button" onclick="basculerBan(${u.id})">${u.is_banned ? 'Débannir' : 'Bannir'}</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function donnerArgent(userId) {
+    const amount = prompt('Montant à ajouter ou retirer (ex: 5000 ou -2000) :', '5000');
+    if (!amount || isNaN(parseFloat(amount))) return;
+    await fetch('/api/admin/give-money', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, amount })
+    });
+    notifAdmin('Trésorerie mise à jour !');
+    chargerJoueurs();
+}
+
+async function basculerBan(userId) {
+    await fetch('/api/admin/toggle-ban', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId })
+    });
+    notifAdmin('Statut du compte modifié.');
+    chargerJoueurs();
+}
+
+chargerJoueurs();
+</script>
+</body>
+</html>
