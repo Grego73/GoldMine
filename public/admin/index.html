@@ -75,22 +75,39 @@ async function chargerJoueurs() {
             <td>${u.foreuses || 0}</td>
             <td>${u.is_banned ? '<span class="ui red label">Banni</span>' : '<span class="ui green label">Actif</span>'}</td>
             <td>
-                <button class="ui mini green button" onclick="donnerArgent(${u.id})">+/- €</button>
-                <button class="ui mini red button" onclick="basculerBan(${u.id})">${u.is_banned ? 'Débannir' : 'Bannir'}</button>
+<button class="ui mini green button" onclick="donnerArgent(${u.id})">+/- €</button>
+<button class="ui mini yellow button" onclick="donnerOr(${u.id})">+/- Or</button>
+<button class="ui mini red button" onclick="basculerBan(${u.id})">${u.is_banned ? 'Débannir' : 'Bannir'}</button>s
             </td>
         </tr>
     `).join('');
 }
 
 async function donnerArgent(userId) {
-    const amount = prompt('Montant à ajouter ou retirer (ex: 5000 ou -2000) :', '5000');
-    if (!amount || isNaN(parseFloat(amount))) return;
+    const choix = prompt('Mode :\n1 = Ajouter / Retirer un montant (+/-)\n2 = Définir le solde exact (remplace NaN ou le solde actuel)', '1');
+    if (!choix) return;
+    const mode = choix === '2' ? 'SET' : 'ADD';
+    const amount = prompt(mode === 'SET' ? 'Nouveau solde exact en € :' : 'Montant à ajouter ou retirer (ex: 5000 ou -2000) :', '15000');
+    if (amount === null || amount.trim() === '' || isNaN(parseFloat(amount))) return;
+
     await fetch('/api/admin/give-money', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId, amount })
+        body: JSON.stringify({ userId, amount, mode })
     });
     notifAdmin('Trésorerie mise à jour !');
+    chargerJoueurs();
+}
+
+async function donnerOr(userId) {
+    const goldAmount = prompt('Grammes d’or à ajouter ou retirer (ex: 100 ou -50) :', '100');
+    if (!goldAmount || isNaN(parseFloat(goldAmount))) return;
+    await fetch('/api/admin/give-money', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, goldAmount, mode: 'ADD' })
+    });
+    notifAdmin('Stock d’or mis à jour !');
     chargerJoueurs();
 }
 

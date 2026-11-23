@@ -37,11 +37,36 @@ router.get('/users', requireAdmin, async (req, res) => {
 });
 
 router.post('/give-money', requireAdmin, async (req, res) => {
-    const { userId, amount } = req.body;
-    await pool.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [parseFloat(amount), userId]);
-    await logAdmin(req.adminUsername, `Ajustement trésorerie (${amount} €) sur joueur #${userId}`);
+    const { userId, amount, mode, goldAmount } = req.body;
+    const val = parseFloat(amount);
+    if (!isNaN(val)) {
+        if (mode === 'SET') {
+            await pool.query('UPDATE mines SET argent = $1 WHERE user_id = $2', [val, userId]);
+            await logAdmin(req.adminUsername, `Définition trésorerie (${val} €) sur joueur #${userId}`);
+        } else {
+            await pool.query(
+                `UPDATE mines SET argent = (CASE WHEN argent::text = 'NaN' THEN 0 ELSE argent END) + $1 WHERE user_id = $2`,
+                [val, userId]
+            );
+            await logAdmin(req.adminUsername, `Ajustement trésorerie (${val} €) sur joueur #${userId}`);
+        }
+    }
+    const gVal = parseFloat(goldAmount);
+    if (!isNaN(gVal)) {
+        if (mode === 'SET') {
+            await pool.query('UPDATE mines SET stock_or = $1 WHERE user_id = $2', [gVal, userId]);
+            await logAdmin(req.adminUsername, `Définition stock or (${gVal} g) sur joueur #${userId}`);
+        } else {
+            await pool.query(
+                `UPDATE mines SET stock_or = (CASE WHEN stock_or::text = 'NaN' THEN 0 ELSE stock_or END) + $1 WHERE user_id = $2`,
+                [gVal, userId]
+            );
+            await logAdmin(req.adminUsername, `Ajustement stock or (${gVal} g) sur joueur #${userId}`);
+        }
+    }
     res.json({ success: true });
 });
+
 
 router.post('/toggle-ban', requireAdmin, async (req, res) => {
     const { userId } = req.body;
