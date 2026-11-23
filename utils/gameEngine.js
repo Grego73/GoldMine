@@ -288,7 +288,7 @@ async function synchroniserHorlogeServeur() {
                             if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Decapage: 0, Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
                             if (catLower.includes('décap') || catLower.includes('decap')) debitsSecteur[sIdx].Decapage += debitEffectif;
-                            if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            else if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
                             else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
                             else if (catLower.includes('trém') || catLower.includes('trem')) debitsSecteur[sIdx].Tremie += debitEffectif;
                             else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyeur += debitEffectif;
@@ -306,9 +306,10 @@ async function synchroniserHorlogeServeur() {
                         if (ratioHoraire > 0) {
                             coutCarburantHoraire += ((parseFloat(item.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Decapage: 0, Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
-                            if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            if (catLower.includes('décap') || catLower.includes('decap')) debitsSecteur[sIdx].Decapage += debitEffectif;
+                            else if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
                             else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
                             else if (catLower.includes('trém') || catLower.includes('trem')) debitsSecteur[sIdx].Tremie += debitEffectif;
                             else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyeur += debitEffectif;
@@ -316,6 +317,7 @@ async function synchroniserHorlogeServeur() {
                             else if (catLower.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
                             else debitsSecteur[sIdx].Excavation += debitEffectif;
                         }
+
 
                         if (item.source_type === 'PDG' && item.owner_id) {
                             const netProprio = +(loyerHeure * (1 - cfg.commissionLocationPdgPct)).toFixed(2);
