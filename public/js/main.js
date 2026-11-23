@@ -387,6 +387,10 @@ function dessinerCarte() {
                 `;
             }
 
+            const btnChantier = st.estEnDecapage
+                ? `<button class="ui mini orange button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🚜 Décaper</button>`
+                : `<button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
+
             div.innerHTML = `
                 ${badgeTop}
                 <h4 style="margin:4px 0; color:${p.id === etat.parcelleActive ? '#fbbf24' : '#f5f5f4'};">${p.nom}</h4>
@@ -395,7 +399,7 @@ function dessinerCarte() {
                     <div><strong>${detailMat}</strong></div>
                     ${blocEtat}
                 </div>
-                <button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>
+                ${btnChantier}
             `;
         } else {
             div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;

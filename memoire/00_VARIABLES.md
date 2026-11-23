@@ -11,6 +11,7 @@ coutRevision ; Coût révision atelier -25% usure (€) ; 900
 coutPanneForcee ; Coût dépannage d'urgence (€) ; 2500
 coutPrime ; Coût prime moral +15% (€) ; 600
 coutCarottage ; Coût carottage géologique (€) ; 1500
+ratioSterilesDecapage ; Part de terre stérile à décaper par rapport à la réserve (0.15 = 15%) ; 0.15
 coutDemenagement ; Coût déménagement équipe (€) ; 1000
 taxeMiniere ; Redevance minière sur ventes (0.08 = 8%) ; 0.08
 chanceEvenement ; Probabilité quotidienne d'incident (0.25 = 25%) ; 0.25
@@ -43,6 +44,7 @@ salaireCadreJour ; Salaire quotidien 1 directeur trombinoscope (€/j) ; 550
 bonusTrombinoscopeCompletPct ; Bonus production si trombinoscope complet (0.15 = +15%) ; 0.15
 malusManqueChefPct ; Malus production si manque de chef (0.20 = -20%) ; 0.20
 usureSansMecanoMult ; Multiplicateur usure si manque de mécano (1.5 = +50%) ; 1.5
+prixPieceDecapage ; Prix de base pièce Concessionnaire Bulldozer / Décapage (€) ; 650
 prixPieceExcavation ; Prix de base pièce Concessionnaire Excavation (€) ; 500
 prixPieceTransport ; Prix de base pièce Concessionnaire Transport (€) ; 600
 prixPieceChargement ; Prix de base pièce Concessionnaire Chargement (€) ; 550
@@ -61,8 +63,11 @@ coursOrMax ; Plafond mondial du cours de l'or (€/g) ; 110
 
 *************************
 
-boutique (21 équipements : 7 étapes x 3 gabarits)
+boutique (24 équipements : 8 familles x 3 gabarits)
 
+Bulldozer Compact D4 ; Décapage ; Petit ; 6500 ; 2 ; 5 ; 500 ; 3.8 ; 1
+Bulldozer sur Chenilles D7 ; Décapage ; Moyen ; 25000 ; 8 ; 16 ; 1300 ; 3.0 ; 2
+Bulldozer Minier D11 ; Décapage ; Géant ; 95000 ; 25 ; 50 ; 4100 ; 2.4 ; 4
 Mini-pelle Compacte ; Excavation ; Petit ; 5000 ; 2 ; 5 ; 450 ; 4.0 ; 1
 Pelleteuse Hydraulique 35t ; Excavation ; Moyen ; 22000 ; 8 ; 16 ; 1200 ; 3.2 ; 2
 Excavatrice Géante 120t ; Excavation ; Géant ; 85000 ; 25 ; 50 ; 3800 ; 2.5 ; 4

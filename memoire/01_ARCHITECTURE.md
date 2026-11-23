@@ -2,7 +2,7 @@
 
 ## 1. Informations générales
 - **Nom du projet :** Gold Mine (`gold-mine`)
-- **Concept :** Simulation économique et gestion d'une mine d'or à ciel ouvert en temps réel (extraction horaire par chantier, chaîne logistique 7 maillons dans l'ordre minier, variateur de vitesse `t/h`, RH & Trombinoscope, 7 concessionnaires de pièces détachées, facture hebdomadaire et marché clients dynamique toutes les 4h).
+- **Concept :** Simulation économique et gestion d'une mine d'or à ciel ouvert en temps réel (extraction horaire par chantier, décapage des terres stériles après carottage, chaîne logistique 7 maillons dans l'ordre minier, variateur de vitesse `t/h`, RH & Trombinoscope, 8 concessionnaires de pièces détachées, facture hebdomadaire et marché clients dynamique toutes les 4h).
 - **Environnement local :** Windows (`C:\Users\gre\Gold Mine`)
 - **Dépôt GitHub :** `Grego73/GoldMine` sur `github.com` (branche `main`)
 - **Stack Technique :** Node.js v24 + Express + Express-Session + PostgreSQL (`pg`) + Bcrypt + Front-end **100 % autonome** (HTML/CSS/JS natif, graphiques `<canvas>` natifs, zéro CDN externe).
@@ -21,7 +21,7 @@
 
 ---
 
-## 3. Arborescence complète du projet (v1.3.0)
+## 3. Arborescence complète du projet (v1.3.1)
 ```text
 Gold Mine/
 ├── .env                        # Variables locales (ignoré par Git)
@@ -38,31 +38,31 @@ Gold Mine/
 │   ├── gameConfig.js           # Cache en mémoire 100 % alimenté par `game_settings` (aucune valeur de secours codée en dur)
 │   ├── eventsCatalog.js        # Catalogue extensible des incidents quotidiens de chantier
 │   ├── links.js                # Centralisation des URLs externes (TchatGC, API Brevo)
-│   └── version.js              # Numéro de version unique (`APP_VERSION = '1.3.0'`) affiché uniquement dans l'Admin
+│   └── version.js              # Numéro de version unique (`APP_VERSION = '1.3.1'`) affiché uniquement dans l'Admin
 │
 ├── utils/
-│   ├── gameEngine.js           # Moteur temps réel : enchères expirées + marché dynamique 4h + extraction horaire 7 étapes (1h) + facture hebdo (7j)
+│   ├── gameEngine.js           # Moteur temps réel : enchères + marché 4h + décapage stériles & extraction horaire 7 étapes (1h) + facture hebdo (7j)
 │   ├── helpers.js              # Fonctions réutilisables (`genererCodeSecurite`, `nettoyerEmail`, `TEXTES_SECOURS`)
 │   ├── mailer.js               # Envoi d'e-mails via `LINKS.brevoApiUrl` (ou mode test dans les logs Render sans clé)
 │   └── logger.js               # Enregistrement centralisé de l'activité des joueurs (`logJoueur`) dans `player_logs`
 │
 ├── routes/
 │   ├── authRoutes.js           # Inscription + code mail, Connexion, Mot de passe perdu, Session (`/me`, `/logout`)
-│   ├── gameRoutes.js           # État (`GET /state`), Actions mine (orpaillage max 10, paiement facture), Vente négociée (bonus DAF/Géologue), Tutoriel, Classement
-│   ├── equipmentRoutes.js      # Parc Matériel (`GET /`), Boutique Neuf, Brocante/Enchères, Location (+ annulation offre), 7 Concessionnaires pièces, Réparation pannes, Variateur `t/h`, Affectation secteur
+│   ├── gameRoutes.js           # État (`GET /state` + `orAujourdhui`), Actions mine (carottage + init décapage, orpaillage max 10, facture), Vente négociée, Tutoriel, Classement
+│   ├── equipmentRoutes.js      # Parc Matériel (`GET /`), Boutique Neuf, Brocante/Enchères, Location (+ annulation offre), 8 Concessionnaires pièces, Réparation pannes, Variateur `t/h`, Affectation secteur
 │   ├── hrRoutes.js             # Gestion RH (`GET /`, 2 conducteurs/engin roulant + 1 mécano/installation fixe + 1/3 roulants), Trombinoscope 6 directeurs
 │   └── adminRoutes.js          # Joueurs (crédit/définition exacte € et Or anti-NaN), Import massif & MAJ variables, Import massif & CRUD Engins/Clients, Textes, Logs
 │
 └── public/
     ├── favicon.png             # Icône mine d'or à ciel ouvert
     ├── index.html              # Page d'accueil vitrine + Connexion / Inscription / Validation code / Mot de passe perdu
-    ├── game.html               # Interface QG (Fosse & Orpaillage 10 max, Matériel & 7 Concessionnaires, RH & Direction, Prospection & Chantiers 7 étapes, Bourse & Clients, Classement, Tutoriel)
+    ├── game.html               # Interface QG (Collecte du jour, Orpaillage 10 max + total, Matériel & 8 Concessionnaires, RH & Direction, Prospection & Chantiers Décapage/7 étapes, Bourse, Classement, Tutoriel)
     ├── regles.html             # Page complète Règles du jeu, Tutoriel 5 étapes & Guide TchatGC
     ├── admin.html              # Redirection automatique vers `/admin/index.html`
     ├── admin/
     │   ├── index.html          # Administration : Gestion des PDG & Comptes (+/- € exact, +/- Or)
     │   ├── settings.html       # Administration : Import massif & Modification des variables d'équilibrage en direct
-    │   ├── catalog.html        # Administration : Import massif & CRUD Catalogue Engins (7 Familles, Gabarits, t/h, Pièces) & Clients
+    │   ├── catalog.html        # Administration : Import massif & CRUD Catalogue Engins (8 Familles, Gabarits, t/h, Pièces) & Clients
     │   ├── texts.html          # Administration : Édition des textes du site
     │   └── logs.html           # Administration : Logs Joueurs & Journal Admin
     ├── css/
@@ -70,8 +70,8 @@ Gold Mine/
     └── js/
         ├── version.js          # Vérification anti-cache de la version affichée uniquement sur l'Admin
         ├── auth.js             # Logique client de `index.html`
-        ├── main.js             # Logique client de `game.html` (graphique `<canvas>`, détail matériel & débit t/h par secteur, grille horizontale 7 étapes, variateur t/h, tutoriel, négociation)
-        ├── equipment.js        # Logique client de l'onglet Matériel (Flotte, Boutique Neuf filtrable par famille/gabarit, 7 Concessionnaires, Enchères, Location)
+        ├── main.js             # Logique client de `game.html` (graphique `<canvas>`, barre de progression décapage + heures restantes, détail matériel & débit t/h par secteur, grille horizontale 7 étapes, variateur t/h, tutoriel, négociation)
+        ├── equipment.js        # Logique client de l'onglet Matériel (Flotte, Boutique Neuf filtrable par famille/gabarit, 8 Concessionnaires, Enchères, Location)
         └── hr.js               # Logique client de l'onglet RH & Direction (ratios engins roulants / installations fixes + Trombinoscope 6 directeurs)
 ```
 
