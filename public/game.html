@@ -120,9 +120,11 @@
             <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
                 <button class="ui yellow button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-flotte', this)">🛠️ Ma Flotte & Contrats</button>
                 <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-boutique', this)">🏪 Boutique Neuf (0% Usure)</button>
+                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-concession', this)">🏢 Concessionnaires & Pièces</button>
                 <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-brocante', this)">🔨 Brocante & Enchères</button>
                 <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-location', this)">🤝 Location d'Engins</button>
             </div>
+
 
             <div id="sub-flotte" class="eq-subtab">
                 <h4 style="color:#fbbf24; margin-bottom:10px;">Mes Engins en Propriété</h4>
@@ -145,6 +147,13 @@
             <div id="sub-boutique" class="eq-subtab" style="display:none;">
                 <p style="color:#d6d3d1; margin-bottom:14px;">Matériel neuf garanti <strong>0 % d'usure</strong> à la livraison.</p>
                 <div id="eq-shop-new-grid" class="ui three column grid"></div>
+            </div>
+            <!-- SOUS-ONGLET CONCESSIONNAIRES & PIÈCES DÉTACHÉES -->
+            <div id="sub-concession" class="eq-subtab" style="display:none;">
+                <p style="color:#d6d3d1; margin-bottom:14px;">
+                    Commandez des pièces détachées auprès des <strong>4 concessionnaires spécialisés</strong> selon la famille et le gabarit de vos engins (<strong>Petit</strong>, <strong>Moyen</strong> ou <strong>Géant</strong>) pour réparer les pannes à la clôture.
+                </p>
+                <div id="eq-dealers-grid" class="ui two column grid"></div>
             </div>
 
             <div id="sub-brocante" class="eq-subtab" style="display:none;">

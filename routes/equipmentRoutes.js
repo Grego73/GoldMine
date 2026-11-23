@@ -9,6 +9,20 @@ function requireAuth(req, res, next) {
     req.session.userId = uid;
     next();
 }
+function calculerPrixPiece(cfg, categorie, gabarit) {
+    const cat = (categorie || '').toLowerCase();
+    let base = parseFloat(cfg.prixPieceExcavation);
+    if (cat.includes('transport')) base = parseFloat(cfg.prixPieceTransport);
+    else if (cat.includes('traitement')) base = parseFloat(cfg.prixPieceTraitement);
+    else if (cat.includes('lavage')) base = parseFloat(cfg.prixPieceLavage);
+
+    const gab = (gabarit || 'Moyen').toLowerCase();
+    let coeff = parseFloat(cfg.coeffPieceMoyen);
+    if (gab === 'petit') coeff = parseFloat(cfg.coeffPiecePetit);
+    else if (gab.includes('g')) coeff = parseFloat(cfg.coeffPieceGeant);
+
+    return Math.round(base * coeff);
+}
 
 // =========================================================================
 // 1. ÉTAT COMPLET DU MATÉRIEL (Ma Flotte, Boutique, Brocante/Enchères, Location)
@@ -66,14 +80,43 @@ router.get('/', requireAuth, async (req, res) => {
             WHERE r.renter_id = $1 AND r.statut = 'EN_COURS'
             ORDER BY r.id ASC
         `, [userId]);
+        
+        const mineInfoRes = await pool.query('SELECT pieces_stock FROM mines WHERE user_id = $1', [userId]);
+        const piecesStock = mineInfoRes.rows.at(0)?.pieces_stock || {};
+
+        const tarifsPieces = {
+            Excavation: {
+                Petit: calculerPrixPiece(cfg, 'Excavation', 'Petit'),
+                Moyen: calculerPrixPiece(cfg, 'Excavation', 'Moyen'),
+                Géant: calculerPrixPiece(cfg, 'Excavation', 'Géant')
+            },
+            Transport: {
+                Petit: calculerPrixPiece(cfg, 'Transport', 'Petit'),
+                Moyen: calculerPrixPiece(cfg, 'Transport', 'Moyen'),
+                Géant: calculerPrixPiece(cfg, 'Transport', 'Géant')
+            },
+            Traitement: {
+                Petit: calculerPrixPiece(cfg, 'Traitement', 'Petit'),
+                Moyen: calculerPrixPiece(cfg, 'Traitement', 'Moyen'),
+                Géant: calculerPrixPiece(cfg, 'Traitement', 'Géant')
+            },
+            Lavage: {
+                Petit: calculerPrixPiece(cfg, 'Lavage', 'Petit'),
+                Moyen: calculerPrixPiece(cfg, 'Lavage', 'Moyen'),
+                Géant: calculerPrixPiece(cfg, 'Lavage', 'Géant')
+            }
+        };
 
         res.json({
+            piecesStock,
+            tarifsPieces,
             myFleet: myFleetRes.rows,
             catalog: catalogRes.rows,
             auctions: auctionsRes.rows,
             rentalOffers: offersRes.rows,
             myActiveRentals: myRentalsRes.rows
         });
+
     } catch (err) {
         console.error('Erreur GET /api/equipment :', err);
         res.status(500).json({ error: 'Erreur chargement module matériel' });
@@ -109,10 +152,11 @@ router.post('/buy-new', requireAuth, async (req, res) => {
 
         await client.query('UPDATE mines SET argent = argent - $1, foreuses = foreuses + 1 WHERE user_id = $2', [prix, userId]);
         await client.query(
-            `INSERT INTO player_fleet (owner_id, catalog_id, nom, categorie, prod_tonnes, carburant_jour, usure_jour, usure_actuelle, statut)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, 0, 'ACTIF')`,
-            [userId, item.id, item.nom, item.categorie, item.prod_tonnes, item.carburant_jour, item.usure_jour]
+            `INSERT INTO player_fleet (owner_id, catalog_id, nom, categorie, gabarit, prod_tonnes, carburant_jour, usure_jour, pieces_panne, usure_actuelle, statut)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'ACTIF')`,
+            [userId, item.id, item.nom, item.categorie, item.gabarit || 'Moyen', item.prod_tonnes, item.carburant_jour, item.usure_jour, item.pieces_panne || 1]
         );
+
 
         const msg = `Achat neuf : ${item.nom} (-${prix.toLocaleString()} €)`;
         await client.query(
@@ -430,4 +474,99 @@ router.post('/repair', requireAuth, async (req, res) => {
     }
 });
 
+// =========================================================================
+// 8. CONCESSIONNAIRES : ACHETER UNE PIÈCE PAR FAMILLE & GABARIT
+// =========================================================================
+router.post('/buy-parts', requireAuth, async (req, res) => {
+    const { categorie, gabarit } = req.body;
+    const quantite = Math.max(1, Math.min(20, parseInt(req.body.quantite) || 1));
+    const userId = req.session.userId;
+    const cfg = getGameConfig();
+
+    const famNorm = ['Excavation', 'Transport', 'Traitement', 'Lavage'].find(f => f.toLowerCase() === (categorie || '').toLowerCase());
+    const gabNorm = ['Petit', 'Moyen', 'Géant'].find(g => g.toLowerCase() === (gabarit || '').toLowerCase());
+    if (!famNorm || !gabNorm) return res.status(400).json({ error: 'Concessionnaire ou gabarit invalide.' });
+
+    const prixUnitaire = calculerPrixPiece(cfg, famNorm, gabNorm);
+    const total = prixUnitaire * quantite;
+    const stockKey = `${famNorm}:${gabNorm}`;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const mineRes = await client.query('SELECT argent, pieces_stock FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        if (parseFloat(mineRes.rows.at(0).argent) < total) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Trésorerie insuffisante chez le concessionnaire.' });
+        }
+
+        const stock = mineRes.rows.at(0).pieces_stock || {};
+        stock[stockKey] = (parseInt(stock[stockKey]) || 0) + quantite;
+
+        await client.query(
+            'UPDATE mines SET argent = argent - $1, pieces_stock = $2 WHERE user_id = $3',
+            [total, JSON.stringify(stock), userId]
+        );
+        await client.query('COMMIT');
+        res.json({ success: true, message: `🏢 Concessionnaire ${famNorm} (${gabNorm}) : +${quantite} pièce(s) achetée(s) (-${total.toLocaleString()} €).` });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Erreur achat concessionnaire' });
+    } finally {
+        client.release();
+    }
+});
+
+// =========================================================================
+// 9. DÉPANNAGE : RÉPARER UN ENGIN EN PANNE AVEC LA PIÈCE DU CONCESSIONNAIRE
+// =========================================================================
+router.post('/fix-breakdown', requireAuth, async (req, res) => {
+    const { fleetId } = req.body;
+    const userId = req.session.userId;
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const mineRes = await client.query('SELECT pieces_stock FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        const fleetRes = await client.query('SELECT * FROM player_fleet WHERE id = $1 AND owner_id = $2 FOR UPDATE', [fleetId, userId]);
+
+        if (fleetRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Engin introuvable.' });
+        }
+
+        const engin = fleetRes.rows.at(0);
+        if (engin.statut !== 'EN_PANNE') {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Cet engin n’est pas en panne.' });
+        }
+
+        const famNorm = ['Excavation', 'Transport', 'Traitement', 'Lavage'].find(f => (engin.categorie || '').toLowerCase().includes(f.toLowerCase())) || 'Excavation';
+        const gabNorm = engin.gabarit || 'Moyen';
+        const stockKey = `${famNorm}:${gabNorm}`;
+        const piecesRequises = parseInt(engin.pieces_panne) || 1;
+
+        const stock = mineRes.rows.at(0).pieces_stock || {};
+        const dispo = parseInt(stock[stockKey]) || 0;
+
+        if (dispo < piecesRequises) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: `Pièce manquante : il faut ${piecesRequises} pièce(s) [${famNorm} — ${gabNorm}] (en stock : ${dispo}).` });
+        }
+
+        stock[stockKey] = dispo - piecesRequises;
+        await client.query('UPDATE mines SET pieces_stock = $1 WHERE user_id = $2', [JSON.stringify(stock), userId]);
+        await client.query(`UPDATE player_fleet SET statut = 'ACTIF', usure_actuelle = 0 WHERE id = $1`, [fleetId]);
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: `✅ ${engin.nom} réparé (${piecesRequises} pièce(s) ${famNorm} ${gabNorm}) et remis en service à 0% !` });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Erreur réparation panne' });
+    } finally {
+        client.release();
+    }
+});
+
 module.exports = router;
+

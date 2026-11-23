@@ -7,6 +7,7 @@ async function chargerModuleMateriel() {
         eqData = await res.json();
         rendreMaFlotte();
         rendreBoutiqueNeuf();
+        rendreConcessionnaires();
         rendreBrocanteEncheres();
         rendreLocationEngins();
     } catch (e) {
@@ -32,23 +33,33 @@ function rendreMaFlotte() {
     } else {
         tbody.innerHTML = eqData.myFleet.map(f => {
             const usure = Math.round(parseFloat(f.usure_actuelle));
+            const gab = f.gabarit || 'Moyen';
+            const nbPieces = parseInt(f.pieces_panne) || 1;
+
             const badgeStatut = f.statut === 'ACTIF'
                 ? '<span class="ui green label">En service</span>'
+                : f.statut === 'EN_PANNE'
+                ? '<span class="ui red label">🚨 EN PANNE</span>'
                 : f.statut === 'EN_VENTE'
                 ? '<span class="ui orange label">En vente / Enchère</span>'
                 : f.statut === 'OFFRE_LOC'
                 ? '<span class="ui blue label">Offre location</span>'
                 : '<span class="ui yellow label">Loué à un PDG</span>';
 
-            const actions = f.statut === 'ACTIF' ? `
-                <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%)</button>
-                <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
-                <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
-            ` : '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
+            let actions = '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
+            if (f.statut === 'EN_PANNE') {
+                actions = `<button class="ui mini red button" onclick="reparerPanne(${f.id})">🚨 Réparer (${nbPieces} pièce(s) ${f.categorie} ${gab})</button>`;
+            } else if (f.statut === 'ACTIF') {
+                actions = `
+                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%)</button>
+                    <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
+                    <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
+                `;
+            }
 
             return `
                 <tr>
-                    <td><strong>${f.nom}</strong><br><small style="color:#a8a29e;">${f.categorie}</small></td>
+                    <td><strong>${f.nom}</strong><br><small style="color:#a8a29e;">${f.categorie} — Gabarit : <strong style="color:#fbbf24;">${gab}</strong></small></td>
                     <td><strong>${f.prod_tonnes} t/j</strong></td>
                     <td>${f.carburant_jour} €/j</td>
                     <td><strong style="color:${usure > 60 ? '#f87171' : '#34d399'};">${usure}%</strong> (+${f.usure_jour}%/j)</td>
@@ -90,11 +101,15 @@ function rendreBoutiqueNeuf() {
     grid.innerHTML = eqData.catalog.map(item => `
         <div class="ui inverted segment" style="display:flex; flex-direction:column; justify-content:space-between;">
             <div>
-                <span class="ui blue label" style="margin-bottom:8px;">${item.categorie}</span>
+                <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
+                    <span class="ui blue label">${item.categorie}</span>
+                    <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
+                </div>
                 <h4 style="color:#fbbf24; margin-bottom:8px;">${item.nom}</h4>
-                <p style="font-size:0.9em; color:#d6d3d1; margin-bottom:4px;">⛏️ Extraction : <strong>${item.prod_tonnes} t/jour</strong></p>
-                <p style="font-size:0.9em; color:#d6d3d1; margin-bottom:4px;">⛽ Carburant : <strong>${item.carburant_jour} €/jour</strong></p>
-                <p style="font-size:0.9em; color:#d6d3d1; margin-bottom:12px;">⚙️ Usure : <strong>${item.usure_jour}% /jour</strong> (Garanti 0% neuf)</p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Extraction : <strong>${item.prod_tonnes} t/jour</strong></p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛽ Carburant : <strong>${item.carburant_jour} €/jour</strong></p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⚙️ Usure : <strong>${item.usure_jour}% /jour</strong> (Garanti 0% neuf)</p>
+                <p style="font-size:0.88em; color:#a8a29e; margin-bottom:12px;">🔧 Pièces en cas de panne : <strong>${item.pieces_panne || 1} pièce(s)</strong></p>
             </div>
             <div>
                 <div style="font-size:1.25em; font-weight:800; color:#34d399; margin-bottom:10px;">${Math.round(item.prix_neuf).toLocaleString()} €</div>
@@ -104,7 +119,44 @@ function rendreBoutiqueNeuf() {
     `).join('');
 }
 
-// 3. BROCANTE & ENCHÈRES ENTRE PDG
+// 3. CONCESSIONNAIRES SPÉCIALISÉS & PIÈCES DÉTACHÉES
+function rendreConcessionnaires() {
+    const grid = document.getElementById('eq-dealers-grid');
+    if (!grid || !eqData || !eqData.tarifsPieces) return;
+
+    const familles = ['Excavation', 'Transport', 'Traitement', 'Lavage'];
+    const gabarits = ['Petit', 'Moyen', 'Géant'];
+    const stock = eqData.piecesStock || {};
+
+    grid.innerHTML = familles.map(fam => {
+        const tarifs = eqData.tarifsPieces[fam] || {};
+        const lignes = gabarits.map(gab => {
+            const key = `${fam}:${gab}`;
+            const enStock = parseInt(stock[key]) || 0;
+            const prix = tarifs[gab] || 0;
+            return `
+                <tr>
+                    <td><span class="ui yellow label">${gab}</span></td>
+                    <td><strong>${enStock}</strong> en stock</td>
+                    <td class="money-text">${prix.toLocaleString()} €</td>
+                    <td><button class="ui mini green button" onclick="acheterPieceConcession('${fam}', '${gab}')">+1 Pièce</button></td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <div class="ui inverted segment">
+                <h4 style="color:#fbbf24; margin-bottom:10px;">🏢 Concessionnaire ${fam}</h4>
+                <table class="ui table">
+                    <thead><tr><th>Gabarit</th><th>Inventaire</th><th>Prix Unitaire</th><th>Commander</th></tr></thead>
+                    <tbody>${lignes}</tbody>
+                </table>
+            </div>
+        `;
+    }).join('');
+}
+
+// 4. BROCANTE & ENCHÈRES ENTRE PDG
 function rendreBrocanteEncheres() {
     const tbody = document.getElementById('eq-auctions-tbody');
     if (!tbody || !eqData) return;
@@ -140,7 +192,7 @@ function rendreBrocanteEncheres() {
     }).join('');
 }
 
-// 4. LOCATION D'ENGINS (PARC OFFICIEL + OFFRES ENTRE PDG)
+// 5. LOCATION D'ENGINS
 function rendreLocationEngins() {
     const offTbody = document.getElementById('eq-official-rentals-tbody');
     if (offTbody && eqData) {
@@ -148,7 +200,7 @@ function rendreLocationEngins() {
             const loyerEstime = Math.round(parseFloat(item.prix_neuf) * 0.08);
             return `
                 <tr>
-                    <td><strong>${item.nom}</strong> <span class="ui blue label">${item.categorie}</span></td>
+                    <td><strong>${item.nom}</strong> <span class="ui blue label">${item.categorie}</span> <span class="ui yellow label">${item.gabarit || 'Moyen'}</span></td>
                     <td><strong>${item.prod_tonnes} t/j</strong></td>
                     <td>${item.carburant_jour} €/j</td>
                     <td class="money-text">~${loyerEstime.toLocaleString()} €/j</td>
@@ -182,7 +234,7 @@ function rendreLocationEngins() {
     }
 }
 
-// --- ACTIONS API MATÉRIEL ---
+// --- ACTIONS API ---
 async function acheterEnginNeuf(catalogId) {
     const res = await fetch('/api/equipment/buy-new', {
         method: 'POST',
@@ -193,6 +245,29 @@ async function acheterEnginNeuf(catalogId) {
     alert(data.message || data.error);
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function acheterPieceConcession(categorie, gabarit) {
+    const res = await fetch('/api/equipment/buy-parts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ categorie, gabarit, quantite: 1 })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function reparerPanne(fleetId) {
+    const res = await fetch('/api/equipment/fix-breakdown', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fleetId })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
 }
 
 async function reviserEngin(fleetId) {

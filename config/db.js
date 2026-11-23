@@ -51,6 +51,16 @@ async function initDB() {
         await client.query(`
             ALTER TABLE mines ADD COLUMN IF NOT EXISTS tutorial_step INTEGER DEFAULT 1;
         `);
+        await client.query(`
+            ALTER TABLE mines ADD COLUMN IF NOT EXISTS pieces_detachees INTEGER DEFAULT 2;
+            ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS gabarit VARCHAR(20) DEFAULT 'Moyen';
+            ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS pieces_panne INTEGER DEFAULT 1;
+            ALTER TABLE player_fleet ADD COLUMN IF NOT EXISTS gabarit VARCHAR(20) DEFAULT 'Moyen';
+            ALTER TABLE player_fleet ADD COLUMN IF NOT EXISTS pieces_panne INTEGER DEFAULT 1;
+        `);
+        await client.query(`
+            ALTER TABLE mines ADD COLUMN IF NOT EXISTS pieces_stock JSONB DEFAULT '{}';
+        `);
 
         // 3. État mondial de la Bourse & Horloge du serveur
         await client.query(`

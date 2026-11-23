@@ -115,18 +115,49 @@ router.get('/equipment-catalog', requireAdmin, async (req, res) => {
 });
 
 router.post('/equipment-catalog', requireAdmin, async (req, res) => {
-    const { nom, categorie, prix_neuf, prod_tonnes, carburant_jour, usure_jour } = req.body;
+    const { nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne } = req.body;
     if (!nom || !categorie) return res.status(400).json({ error: 'Nom et catégorie requis' });
 
     await pool.query(
-        `INSERT INTO equipment_catalog (nom, categorie, prix_neuf, prod_tonnes, carburant_jour, usure_jour, actif)
-         VALUES ($1, $2, $3, $4, $5, $6, TRUE)
+        `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne, actif)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
          ON CONFLICT (nom) DO UPDATE SET
-         categorie = $2, prix_neuf = $3, prod_tonnes = $4, carburant_jour = $5, usure_jour = $6, actif = TRUE`,
-        [nom.trim(), categorie.trim(), parseFloat(prix_neuf), parseFloat(prod_tonnes), parseFloat(carburant_jour), parseFloat(usure_jour)]
+         categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, carburant_jour = $6, usure_jour = $7, pieces_panne = $8, actif = TRUE`,
+        [nom.trim(), categorie.trim(), (gabarit || 'Moyen').trim(), parseFloat(prix_neuf), parseFloat(prod_tonnes), parseFloat(carburant_jour), parseFloat(usure_jour), parseInt(pieces_panne) || 1]
     );
-    await logAdmin(req.adminUsername, `Ajout/MAJ engin catalogue : ${nom} (${prix_neuf} €)`);
+    await logAdmin(req.adminUsername, `Ajout/MAJ engin catalogue : ${nom} (${gabarit || 'Moyen'})`);
     res.json({ success: true });
+});
+
+router.post('/equipment-catalog-bulk', requireAdmin, async (req, res) => {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Aucune donnée à importer.' });
+    }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        let count = 0;
+        for (const it of items) {
+            if (!it.nom || !it.categorie || isNaN(parseFloat(it.prix_neuf))) continue;
+            await client.query(
+                `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne, actif)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+                 ON CONFLICT (nom) DO UPDATE SET
+                 categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, carburant_jour = $6, usure_jour = $7, pieces_panne = $8, actif = TRUE`,
+                [it.nom.trim(), it.categorie.trim(), (it.gabarit || 'Moyen').trim(), parseFloat(it.prix_neuf), parseFloat(it.prod_tonnes), parseFloat(it.carburant_jour), parseFloat(it.usure_jour), parseInt(it.pieces_panne) || 1]
+            );
+            count += 1;
+        }
+        await client.query('COMMIT');
+        await logAdmin(req.adminUsername, `Import massif de ${count} engins au catalogue`);
+        res.json({ success: true, count });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        res.status(500).json({ error: 'Erreur import engins' });
+    } finally {
+        client.release();
+    }
 });
 
 router.delete('/equipment-catalog/:id', requireAdmin, async (req, res) => {
@@ -134,6 +165,7 @@ router.delete('/equipment-catalog/:id', requireAdmin, async (req, res) => {
     await logAdmin(req.adminUsername, `Suppression engin catalogue #${req.params.id}`);
     res.json({ success: true });
 });
+
 
 // 4. GESTION DU CATALOGUE CLIENTS
 router.get('/clients-catalog', requireAdmin, async (req, res) => {

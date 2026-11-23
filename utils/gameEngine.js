@@ -189,11 +189,15 @@ async function synchroniserHorlogeServeur() {
                     }
 
                     if (panne) {
-                        usureEngin = 0;
                         pannesCount += 1;
+                        await client.query(`UPDATE player_fleet SET usure_actuelle = 100, statut = 'EN_PANNE' WHERE id = $1`, [engin.id]);
+                        sommeUsure += 100;
                     } else {
                         prodEngins += parseFloat(engin.prod_tonnes) * cadence * ratioHoraire;
+                        sommeUsure += usureEngin;
+                        await client.query('UPDATE player_fleet SET usure_actuelle = $1 WHERE id = $2', [usureEngin, engin.id]);
                     }
+
                     sommeUsure += usureEngin;
                     await client.query('UPDATE player_fleet SET usure_actuelle = $1 WHERE id = $2', [usureEngin, engin.id]);
                 }
@@ -268,7 +272,7 @@ async function synchroniserHorlogeServeur() {
                     + (chefsEquipe * cfg.salaireChefJour)
                     + (cadres.length * cfg.salaireCadreJour);
 
-                let couts = salairesRH + coutCarburantTotal + coutLoyers + (pannesCount * cfg.coutPanneForcee);
+                let couts = salairesRH + coutCarburantTotal + coutLoyers;
                 let rapport = `Clôture J${mine.jour + 1} : +${Math.round(orProduit)}g d'or (${Math.round(rocheExtraite)}t) | Frais & Salaires : -${Math.round(couts)} €`;
 
                 if (trombinoscopeComplet) rapport += ` | 🏆 Synergie Direction (+${Math.round((cfg.bonusTrombinoscopeCompletPct || 0.15) * 100)}%)`;
@@ -276,7 +280,7 @@ async function synchroniserHorlogeServeur() {
                 if (enginsSansChauffeur > 0) rapport += ` | 🚜 ${enginsSansChauffeur} engin(s) à l'arrêt (manque conducteurs)`;
                 if (manqueMecano) rapport += ' | 🔧 Sous-effectif mécanos (usure accélérée)';
                 if (manqueChef) rapport += ' | 👷 Manque chef d’équipe (-20% prod)';
-                if (pannesCount > 0) rapport += ` | ⚠️ ${pannesCount} PANNE(S) (-${pannesCount * cfg.coutPanneForcee} €)`;
+                if (pannesCount > 0) rapport += ` | ⚠️ ${pannesCount} ENGIN(S) EN PANNE (pièces requises)`;
                 if (impayesCount > 0) rapport += ` | 🚨 ${impayesCount} LOCATION(S) RÉSILIÉE(S)`;
 
                 const argentFinal = argentActuel - couts;

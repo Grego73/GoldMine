@@ -26,25 +26,48 @@
 
     <!-- 1. CATALOGUE DES ENGINS NEUFS -->
     <div class="ui segment mine-card">
-        <h3 class="ui dividing header mine-header">🚜 Catalogue des Engins Neufs (Boutique & Location)</h3>
-        <div style="display:grid; grid-template-columns: 1.5fr 1fr 0.8fr 0.8fr 0.8fr 0.8fr auto; gap:8px; margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+            <h3 class="ui header mine-header" style="margin:0; border:none;">🚜 Catalogue des Engins Neufs (Familles, Gabarits & Pièces)</h3>
+            <button class="ui blue mini button" onclick="exporterEngins()">📤 Exporter le catalogue</button>
+        </div>
+
+        <!-- ZONE D'IMPORT MASSIF ENGINS -->
+        <div class="ui inverted segment" style="margin-bottom: 16px;">
+            <strong style="color:#34d399; display:block; margin-bottom:6px;">📥 Import rapide en masse (1 engin par ligne : <code>nom ; famille ; gabarit ; prix ; prod_t ; carb_j ; usure_j ; pieces_panne</code>)</strong>
+            <textarea id="bulk-eq-text" rows="5" style="width:100%; background:#141210; color:#f5f5f4; border:1px solid #57534e; border-radius:6px; padding:10px; font-family:monospace; font-size:0.88em;" placeholder="Mini-pelle Compacte ; Excavation ; Petit ; 5000 ; 15 ; 450 ; 4 ; 1"></textarea>
+            <div style="margin-top:8px; display:flex; justify-content:flex-end;">
+                <button class="ui green button" onclick="importerEnginsEnMasse()">📥 Importer tous les engins d'un coup</button>
+            </div>
+        </div>
+
+        <!-- AJOUT UNITAIRE -->
+        <div style="display:grid; grid-template-columns: 1.4fr 1fr 0.8fr 0.7fr 0.7fr 0.7fr 0.7fr 0.6fr auto; gap:6px; margin-bottom:14px;">
             <input type="text" id="new-eq-nom" placeholder="Nom engin">
-            <input type="text" id="new-eq-cat" placeholder="Catégorie">
+            <input type="text" id="new-eq-cat" placeholder="Famille (Excavation...)">
+            <select id="new-eq-gab">
+                <option value="Petit">Petit</option>
+                <option value="Moyen" selected>Moyen</option>
+                <option value="Géant">Géant</option>
+            </select>
             <input type="number" id="new-eq-prix" placeholder="Prix €">
             <input type="number" id="new-eq-prod" placeholder="Prod t/j">
             <input type="number" id="new-eq-carb" placeholder="Carb €/j">
             <input type="number" step="any" id="new-eq-usure" placeholder="Usure %/j">
-            <button class="ui green button" onclick="ajouterEnginCatalogue()">+ Ajouter</button>
+            <input type="number" id="new-eq-pieces" placeholder="Pièces" value="1">
+            <button class="ui yellow button" onclick="ajouterEnginCatalogue()">+ Ajouter</button>
         </div>
+
         <table class="ui table">
             <thead>
                 <tr>
                     <th>Modèle</th>
-                    <th>Catégorie</th>
+                    <th>Famille</th>
+                    <th>Gabarit</th>
                     <th>Prix Neuf</th>
                     <th>Extraction</th>
                     <th>Carburant</th>
                     <th>Usure/j</th>
+                    <th>Pièces/Panne</th>
                     <th>Action</th>
                 </tr>
             </thead>
@@ -89,6 +112,8 @@
 
 <script src="/js/version.js"></script>
 <script>
+let currentEqList = [];
+
 function notifAdmin(msg, isError = false) {
     const box = document.getElementById('admin-notif');
     box.className = isError ? 'ui red message' : 'ui green message';
@@ -97,35 +122,75 @@ function notifAdmin(msg, isError = false) {
     setTimeout(() => { box.style.display = 'none'; }, 3500);
 }
 
-// --- ENGINS NEUFS ---
 async function chargerCatalogueEngins() {
     const res = await fetch('/api/admin/equipment-catalog');
     if (res.status === 401 || res.status === 403) {
         window.location.href = '/game.html';
         return;
     }
-    const list = await res.json();
-    document.getElementById('admin-equipment-catalog').innerHTML = list.map(e => `
+    currentEqList = await res.json();
+    document.getElementById('admin-equipment-catalog').innerHTML = currentEqList.map(e => `
         <tr>
             <td><strong>${e.nom}</strong></td>
             <td><span class="ui blue label">${e.categorie}</span></td>
+            <td><span class="ui yellow label">${e.gabarit || 'Moyen'}</span></td>
             <td class="money-text">${Math.round(e.prix_neuf).toLocaleString()} €</td>
             <td>${e.prod_tonnes} t/j</td>
             <td>${e.carburant_jour} €/j</td>
             <td>${e.usure_jour}% /j</td>
+            <td>🔧 ${e.pieces_panne || 1}</td>
             <td><button class="ui red mini button" onclick="supprimerEnginCatalogue(${e.id})">Supprimer</button></td>
         </tr>
     `).join('');
+}
+
+async function importerEnginsEnMasse() {
+    const raw = document.getElementById('bulk-eq-text').value.trim();
+    if (!raw) return notifAdmin('Collez au moins une ligne d’engin.', true);
+
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    const items = [];
+    for (const line of lines) {
+        const p = line.split(';').map(x => x.trim());
+        if (p.length >= 8) {
+            items.push({
+                nom: p.at(0), categorie: p.at(1), gabarit: p.at(2),
+                prix_neuf: p.at(3), prod_tonnes: p.at(4), carburant_jour: p.at(5),
+                usure_jour: p.at(6), pieces_panne: p.at(7)
+            });
+        }
+    }
+    if (items.length === 0) return notifAdmin('Format invalide (8 colonnes séparées par ; requises).', true);
+
+    const res = await fetch('/api/admin/equipment-catalog-bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+    });
+    const data = await res.json();
+    if (data.success) {
+        document.getElementById('bulk-eq-text').value = '';
+        notifAdmin(`✅ ${data.count} engins importés au catalogue !`);
+        chargerCatalogueEngins();
+    }
+}
+
+function exporterEngins() {
+    const txt = currentEqList.map(e => `${e.nom} ; ${e.categorie} ; ${e.gabarit || 'Moyen'} ; ${e.prix_neuf} ; ${e.prod_tonnes} ; ${e.carburant_jour} ; ${e.usure_jour} ; ${e.pieces_panne || 1}`).join('\n');
+    document.getElementById('bulk-eq-text').value = txt;
+    notifAdmin('📤 Catalogue engins extrait dans la zone ci-dessus !');
 }
 
 async function ajouterEnginCatalogue() {
     const body = {
         nom: document.getElementById('new-eq-nom').value,
         categorie: document.getElementById('new-eq-cat').value,
+        gabarit: document.getElementById('new-eq-gab').value,
         prix_neuf: parseFloat(document.getElementById('new-eq-prix').value),
         prod_tonnes: parseFloat(document.getElementById('new-eq-prod').value),
         carburant_jour: parseFloat(document.getElementById('new-eq-carb').value),
-        usure_jour: parseFloat(document.getElementById('new-eq-usure').value)
+        usure_jour: parseFloat(document.getElementById('new-eq-usure').value),
+        pieces_panne: parseInt(document.getElementById('new-eq-pieces').value) || 1
     };
     if (!body.nom || !body.categorie || isNaN(body.prix_neuf)) {
         return notifAdmin('Veuillez remplir tous les champs de l’engin.', true);
@@ -146,7 +211,6 @@ async function supprimerEnginCatalogue(id) {
     chargerCatalogueEngins();
 }
 
-// --- CLIENTS ACHETEURS ---
 async function chargerCatalogueClients() {
     const res = await fetch('/api/admin/clients-catalog');
     if (!res.ok) return;
