@@ -62,24 +62,25 @@ function afficherToast(msg, isError = false) {
     box.className = isError ? 'ui red message' : 'ui green message';
     box.style.position = 'fixed';
     box.style.top = '16px';
-    box.style.left = '50%';
-    box.style.transform = 'translateX(-50%)';
+    box.style.left = '16px';
+    box.style.transform = 'none';
     box.style.bottom = 'auto';
     box.style.right = 'auto';
     box.style.margin = '0';
     box.style.zIndex = '10000';
-    box.style.maxWidth = '540px';
-    box.style.width = 'max-content';
-    box.style.textAlign = 'center';
+    box.style.maxWidth = '420px';
+    box.style.width = 'auto';
+    box.style.textAlign = 'left';
     box.style.pointerEvents = 'none';
-    box.style.borderRadius = '24px';
-    box.style.padding = '10px 22px';
+    box.style.backgroundColor = isError ? 'rgba(153, 27, 27, 0.95)' : 'rgba(6, 95, 70, 0.95)';
+    box.style.borderRadius = '8px';
+    box.style.padding = '12px 18px';
     box.style.fontWeight = '700';
-    box.style.boxShadow = '0 8px 24px rgba(0,0,0,0.75)';
+    box.style.boxShadow = '0 8px 24px rgba(0,0,0,0.8)';
     box.innerText = msg;
     box.style.display = 'block';
     clearTimeout(window._toastTimer);
-    window._toastTimer = setTimeout(() => { box.style.display = 'none'; }, 4000);
+    window._toastTimer = setTimeout(() => { box.style.display = 'none'; }, 4500);
 }
 
 // 2. CHARGEMENT COMPLET DEPUIS LE SERVEUR
