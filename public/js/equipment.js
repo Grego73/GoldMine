@@ -9,7 +9,7 @@ function filtrerCatalogueBoutique(cat, gab) {
 }
 
 function trierCatalogueLogique(liste) {
-    const ordreCat = { Excavation: 1, Transport: 2, Chargement: 3, Trémie: 4, Convoyeur: 5, Traitement: 6, Lavage: 7 };
+    const ordreCat = { Décapage: 1, Excavation: 2, Transport: 3, Chargement: 4, Trémie: 5, Convoyeur: 6, Traitement: 7, Lavage: 8 };
     const ordreGab = { Petit: 1, Moyen: 2, Géant: 3 };
     return [...liste].sort((a, b) => {
         const cA = ordreCat[a.categorie] || 99;
@@ -127,14 +127,16 @@ function rendreBoutiqueNeuf() {
 
     const categories = [
         { id: 'TOUS', label: '🌐 Tous' },
+        { id: 'Décapage', label: '🚜 Décapage (Bulldozer)' },
         { id: 'Excavation', label: '⛏️ Excavation' },
         { id: 'Transport', label: '🚛 Transport' },
-        { id: 'Chargement', label: '🚜 Chargement' },
+        { id: 'Chargement', label: '🏗️ Chargement' },
         { id: 'Trémie', label: '📥 Trémie' },
         { id: 'Convoyeur', label: '➿ Convoyeur' },
         { id: 'Traitement', label: '⚙️ Traitement' },
         { id: 'Lavage', label: '💧 Lavage' }
     ];
+
 
     const gabarits = [
         { id: 'TOUS', label: 'Tous gabarits' },
@@ -195,7 +197,7 @@ function rendreConcessionnaires() {
     const grid = document.getElementById('eq-dealers-grid');
     if (!grid || !eqData || !eqData.tarifsPieces) return;
 
-    const familles = ['Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
+    const familles = ['Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
     const gabarits = ['Petit', 'Moyen', 'Géant'];
     const stock = eqData.piecesStock || {};
 

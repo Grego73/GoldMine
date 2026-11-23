@@ -213,10 +213,19 @@ router.post('/action', requireAuth, async (req, res) => {
                 }
                 argent -= coutCarottageReel;
                 p.estSondee = true;
+                p.estDecapee = false;
+                const ratioSteriles = parseFloat(cfg.ratioSterilesDecapage) || 0.15;
+                p.sterilesTotal = Math.max(50, Math.round((parseFloat(p.reserveReelle) || 1000) * ratioSteriles));
+                p.sterilesRestants = p.sterilesTotal;
+
                 const erreur = (Math.random() * 0.4) - 0.2;
                 p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
-                message = `Carottage ${p.nom} : teneur estimée à ~${p.estimationPurete} g/t (-${coutCarottageReel} €).`;
+                message = `Carottage ${p.nom} : teneur ~${p.estimationPurete} g/t | Décapage requis : ${p.sterilesTotal} t de stériles (-${coutCarottageReel} €).`;
             } else {
+                if (p.estDecapee === false && (parseFloat(p.sterilesRestants) || 0) > 0) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: `Décapage inachevé sur ${p.nom} (${Math.round(p.sterilesRestants)} t de terre stérile restantes) ! Envoyez un Bulldozer + Excavatrice + Camion benne.` });
+                }
                 if (argent < cfg.coutDemenagement) {
                     await client.query('ROLLBACK');
                     return res.status(400).json({ error: 'Trésorerie insuffisante' });
@@ -225,6 +234,7 @@ router.post('/action', requireAuth, async (req, res) => {
                 parcelleActive = id;
                 message = `Déménagement vers ${p.nom} (teneur réelle : ${p.pureteReelle} g/t / -${cfg.coutDemenagement} €).`;
             }
+
         } else if (type === 'payer_facture') {
             if (factureAttente <= 0) {
                 await client.query('ROLLBACK');

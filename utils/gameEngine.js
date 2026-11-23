@@ -285,8 +285,9 @@ async function synchroniserHorlogeServeur() {
                             sommeUsure += 100;
                         } else {
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Decapage: 0, Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
+                            if (catLower.includes('décap') || catLower.includes('decap')) debitsSecteur[sIdx].Decapage += debitEffectif;
                             if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
                             else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
                             else if (catLower.includes('trém') || catLower.includes('trem')) debitsSecteur[sIdx].Tremie += debitEffectif;
@@ -350,11 +351,25 @@ async function synchroniserHorlogeServeur() {
                     const p = parcelles.at(idx);
                     if (!p || !p.estSondee || p.reserveReelle <= 0) continue;
 
-                    const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+                    const d = debitsSecteur[idx] || { Decapage: 0, Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+
+                    // PHASE 1 : DÉCAPAGE DES TERRES STÉRILES (Bulldozer + Excavatrice + Camion benne)
+                    if (p.estDecapee === false && (parseFloat(p.sterilesRestants) || 0) > 0) {
+                        const debitDecapage = Math.min(d.Decapage, d.Excavation, d.Transport) * multProdChef;
+                        if (debitDecapage > 0) {
+                            const sterilesEvacues = Math.min(parseFloat(p.sterilesRestants), debitDecapage);
+                            p.sterilesRestants = Math.max(0, +(parseFloat(p.sterilesRestants) - sterilesEvacues).toFixed(1));
+                            if (p.sterilesRestants <= 0) {
+                                p.estDecapee = true;
+                            }
+                        }
+                        continue; // Pas d'extraction d'or tant que le décapage n'est pas terminé
+                    }
+
+                    // PHASE 2 : EXTRACTION D'OR (Chaîne 7 étapes : Excavation -> Transport -> Chargement -> Trémie -> Convoyeur -> Traitement -> Lavage)
                     const debitAmont = Math.min(d.Excavation, d.Transport, d.Chargement, d.Tremie, d.Convoyeur);
                     const debitTraitement = Math.min(debitAmont, d.Traitement);
                     const debitChaine = Math.min(debitTraitement, d.Lavage);
-
 
                     let prodManuelle = 0;
                     if (idx === parseInt(mine.parcelle_active) && !greve) {
