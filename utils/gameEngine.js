@@ -463,6 +463,68 @@ async function synchroniserHorlogeServeur() {
 
             await client.query(`UPDATE market_state SET last_weekly_tick = NOW() WHERE id = 1`);
         }
+        // D. BANQUES : ÉCHÉANCES QUOTIDIENNES & ÉPARGNES À TERME (1 FOIS PAR 24H)
+        const msJourBanque = 24 * 3600 * 1000;
+        const baseTickBanque = new Date(mkt.last_daily_tick || mkt.last_hourly_tick).getTime();
+        const joursBanquePasses = Math.floor((Date.now() - baseTickBanque) / msJourBanque);
+
+        if (joursBanquePasses >= 1) {
+            // 1. Prélèvement des échéances d'emprunts en cours
+            const loansRes = await client.query(`
+                SELECT l.*, u.username, m.argent
+                FROM player_loans l
+                JOIN users u ON u.id = l.user_id
+                JOIN mines m ON m.user_id = l.user_id
+                WHERE l.statut = 'EN_COURS' AND u.is_banned = FALSE
+                FOR UPDATE OF l, m
+            `);
+
+            for (const loan of loansRes.rows) {
+                const nbJours = Math.min(joursBanquePasses, parseInt(loan.jours_restants) || 1);
+                const echeance = parseFloat(loan.echeance_jour) || 0;
+                const montantPreleve = Math.min(parseFloat(loan.restant_du), +(echeance * nbJours).toFixed(2));
+                const nouveauRestant = Math.max(0, +(parseFloat(loan.restant_du) - montantPreleve).toFixed(2));
+                const nouveauxJours = Math.max(0, (parseInt(loan.jours_restants) || 1) - nbJours);
+                const estSolde = nouveauRestant <= 0 || nouveauxJours <= 0;
+
+                await client.query('UPDATE mines SET argent = argent - $1 WHERE user_id = $2', [montantPreleve, loan.user_id]);
+                await client.query(
+                    `UPDATE player_loans SET restant_du = $1, jours_restants = $2, statut = $3 WHERE id = $4`,
+                    [estSolde ? 0 : nouveauRestant, estSolde ? 0 : nouveauxJours, estSolde ? 'SOLDE' : 'EN_COURS', loan.id]
+                );
+
+                await client.query(
+                    `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+                    [loan.user_id, loan.username, `🏦 Échéance prêt (${loan.banque_nom}) : -${Math.round(montantPreleve).toLocaleString()} € (${estSolde ? 'Prêt soldé !' : nouveauxJours + 'j restants'}).`]
+                );
+            }
+
+            // 2. Décompte et versement des placements d'épargne bloquée
+            const savingsRes = await client.query(`
+                SELECT s.*, u.username
+                FROM player_savings s
+                JOIN users u ON u.id = s.user_id
+                WHERE s.statut = 'BLOQUE' AND u.is_banned = FALSE
+                FOR UPDATE OF s
+            `);
+
+            for (const sav of savingsRes.rows) {
+                const nouveauxJours = Math.max(0, (parseInt(sav.jours_restants) || 1) - joursBanquePasses);
+                if (nouveauxJours <= 0) {
+                    const gain = parseFloat(sav.gain_final) || 0;
+                    await client.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [gain, sav.user_id]);
+                    await client.query(`UPDATE player_savings SET jours_restants = 0, statut = 'VERSE' WHERE id = $1`, [sav.id]);
+                    await client.query(
+                        `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+                        [sav.user_id, sav.username, `📈 Placement à terme arrivé à échéance : +${Math.round(gain).toLocaleString()} € crédités (capital + intérêts) !`]
+                    );
+                } else {
+                    await client.query(`UPDATE player_savings SET jours_restants = $1 WHERE id = $2`, [nouveauxJours, sav.id]);
+                }
+            }
+
+            await client.query(`UPDATE market_state SET last_daily_tick = CURRENT_DATE WHERE id = 1`);
+        }
 
         await client.query('COMMIT');
     } catch (err) {

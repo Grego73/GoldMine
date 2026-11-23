@@ -16,6 +16,7 @@
         <a class="item" id="nav-rh" onclick="changerOnglet('rh', this); chargerModuleRH();">👔 RH & Direction</a>
         <a class="item" onclick="changerOnglet('prospection', this)">🗺️ Prospection</a>
         <a class="item" onclick="changerOnglet('marche', this)">📈 Bourse & Clients</a>
+        <a class="item" id="nav-banque" onclick="changerOnglet('banque', this); chargerModuleBanque();">🏦 Banques</a>
         <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
     </div>
 
@@ -88,7 +89,6 @@
                                 <div id="detail-frais-box" style="display:none; margin-top:10px; padding-top:8px; border-top:1px dashed #44403c; font-size:0.86em; color:#d6d3d1;"></div>
                             </div>
                         </div>
-                        <button id="btn-payer-facture" class="ui mini red button" style="display:none;" onclick="actionMine('payer_facture')">🧾 Payer la facture</button>
                     </div>
                 </div>
                 
@@ -276,7 +276,49 @@
             </table>
         </div>
     </div>
+    <!-- ONGLET BANQUES, EMPRUNTS & ÉPARGNE -->
+    <div id="tab-banque" class="tab-section" style="display:none;">
+        <div class="ui segment mine-card">
+            <h3 class="ui dividing header mine-header">🏦 Situation Financière & Capacité d'Emprunt (Plafond 33%)</h3>
+            <div class="ui statistics" id="bank-kpi-grid"></div>
+            <p id="bank-daf-bonus" style="margin-top:10px; color:#34d399; font-weight:700;"></p>
+        </div>
 
+        <div class="ui three column grid" id="bank-offers-grid" style="margin-bottom:20px;"></div>
+
+        <div class="ui two column grid">
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">📋 Mes Emprunts en Cours</h3>
+                <table class="ui table">
+                    <thead>
+                        <tr><th>Banque</th><th>Restant dû</th><th>Échéance / j</th><th>Fin</th><th>Action</th></tr>
+                    </thead>
+                    <tbody id="bank-loans-tbody"></tbody>
+                </table>
+            </div>
+
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">📈 Épargne Bloquée (Certificats de Dépôt)</h3>
+                <div style="background:#1c1917; border:1px solid #44403c; border-radius:6px; padding:10px; margin-bottom:14px;">
+                    <div style="display:flex; flex-wrap:wrap; gap:8px; align-items:center;">
+                        <input type="number" id="bank-save-amount" min="1000" step="500" value="5000" style="width:130px; padding:6px;" placeholder="Montant (€)">
+                        <select id="bank-save-days" style="padding:6px;">
+                            <option value="7" id="opt-save-7">7 jours (+3%)</option>
+                            <option value="14" id="opt-save-14">14 jours (+7%)</option>
+                        </select>
+                        <button class="ui green button" onclick="ouvrirPlacementEpargne()">💰 Bloquer ce capital</button>
+                    </div>
+                </div>
+                <table class="ui table">
+                    <thead>
+                        <tr><th>Capital placé</th><th>Gain à l'échéance</th><th>Jours restants</th></tr>
+                    </thead>
+                    <tbody id="bank-savings-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <!-- ONGLET CLASSEMENT -->
     <div id="tab-classement" class="tab-section" style="display:none;">
         <div class="ui segment mine-card">
             <h3 class="ui dividing header mine-header">🏆 Classement des Compagnies Minières</h3>
@@ -302,5 +344,6 @@
 <script src="/js/version.js"></script>
 <script src="/js/main.js"></script>
 <script src="/js/equipment.js"></script>
+<script src="/js/bank.js"></script>
 </body>
 </html>

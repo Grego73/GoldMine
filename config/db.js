@@ -221,6 +221,41 @@ async function initDB() {
             );
         `);
 
+        // 13. Emprunts Bancaires des PDG
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS player_loans (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                banque_code VARCHAR(30) NOT NULL,
+                banque_nom VARCHAR(100) NOT NULL,
+                montant_emprunte NUMERIC NOT NULL,
+                taux_interet NUMERIC NOT NULL,
+                total_a_rembourser NUMERIC NOT NULL,
+                restant_du NUMERIC NOT NULL,
+                echeance_jour NUMERIC NOT NULL,
+                duree_jours INTEGER NOT NULL,
+                jours_restants INTEGER NOT NULL,
+                statut VARCHAR(20) DEFAULT 'EN_COURS',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
+        // 14. Placements d'Épargne Bloquée (Certificats de dépôt)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS player_savings (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                banque_nom VARCHAR(100) NOT NULL,
+                montant_place NUMERIC NOT NULL,
+                taux_rendement NUMERIC NOT NULL,
+                gain_final NUMERIC NOT NULL,
+                duree_jours INTEGER NOT NULL,
+                jours_restants INTEGER NOT NULL,
+                statut VARCHAR(20) DEFAULT 'BLOQUE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         // Vérification stricte que la base est bien configurée (sinon -> mode maintenance)
         const checkSettings = await client.query('SELECT COUNT(*) FROM game_settings');
         if (parseInt(checkSettings.rows.at(0).count) === 0) {

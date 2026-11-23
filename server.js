@@ -14,7 +14,7 @@ const gameRoutes = require('./routes/gameRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const equipmentRoutes = require('./routes/equipmentRoutes');
 const { router: hrRoutes } = require('./routes/hrRoutes');
-
+const bankRoutes = require('./routes/bankRoutes');
 const app = express();
 const PORT = process.env.PORT || 3000;
 let isMaintenance = true;
@@ -67,6 +67,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Verrou de maintenance pour les routes de jeu uniquement (avec tentative de reprise auto)
+app.use('/api/bank', bankRoutes);
 app.use('/api', async (req, res, next) => {
     if (isMaintenance) {
         try {
