@@ -268,15 +268,15 @@ async function reclamerTutoriel() {
 
 function dessinerCarte() {
     const grid = document.getElementById('mapGrid');
+    if (!grid) return;
     grid.innerHTML = '';
-    parcelles.forEach(p => {
+    parcelles.forEach((p, i) => {
         const div = document.createElement('div');
         div.className = 'pit-tile' + (p.id === etat.parcelleActive ? ' active' : '') + (p.reserveReelle <= 0 ? ' depleted' : '');
         if (p.id === etat.parcelleActive) {
-            div.innerHTML = `<div class="ui green label">ACTIF</div><h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div>`;
+            div.innerHTML = `<div class="ui green label">ACTIF</div><h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div><button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
         } else if (p.estSondee) {
-            div.innerHTML = `<div class="ui blue label">SONDÉ</div><h4 style="margin:4px 0;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer: ${CONFIG.coutDemenagement}€</small>`;
-            <button class="ui mini yellow button" style="margin-top:6px;" onclick="ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>
+            div.innerHTML = `<div class="ui blue label">SONDÉ</div><h4 style="margin:4px 0;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer: ${CONFIG.coutDemenagement}€</small><br><button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
         } else {
             div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;
         }
@@ -284,6 +284,7 @@ function dessinerCarte() {
         grid.appendChild(div);
     });
 }
+
 
 function majSliderMarge() {
     const val = parseInt(document.getElementById('negoc-marge').value);
