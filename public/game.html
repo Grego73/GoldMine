@@ -8,20 +8,22 @@
 </head>
 <body>
 
-<div class="ui menu mine-nav">
-    <div class="header item">⛏️ GOLD MINE</div>
-    <a class="item active" onclick="changerOnglet('mine', this)">🏭 Fosse & Équipe</a>
-    <a class="item" id="nav-materiel" onclick="changerOnglet('materiel', this); chargerModuleMateriel();">🚜 Matériel & Marché</a>
-    <a class="item" onclick="changerOnglet('prospection', this)">🗺️ Prospection</a>
-    <a class="item" onclick="changerOnglet('marche', this)">📈 Bourse & Clients</a>
-    <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
-    <div class="right menu">
-        <a href="/regles.html" class="item">📖 Règles & Guide</a>
-        <span id="countdown-cloture" class="ui label">⏳ Clôture : --h--</span>
-        <span id="app-version" class="ui label"></span>
-        <a href="https://onrender.com" target="_blank" id="link-tchatgc-game" class="item">💬 Tchat</a>
-        <a href="/admin.html" id="btn-admin-link" class="ui orange mini button" style="display:none;">🛡️ Admin</a>
-        <a class="item" onclick="deconnexion()">🚪 Déconnexion</a>
+<div class="mine-nav" style="display:flex; align-items:center; justify-content:space-between; flex-wrap:nowrap; padding:8px 16px; gap:10px; overflow-x:auto;">
+    <div style="display:flex; align-items:center; gap:6px;">
+        <span style="font-weight:900; color:#fbbf24; font-size:1.1em; margin-right:10px; white-space:nowrap;">⛏️ GOLD MINE</span>
+        <a class="item active" onclick="changerOnglet('mine', this)">🏭 Fosse & Équipe</a>
+        <a class="item" id="nav-materiel" onclick="changerOnglet('materiel', this); chargerModuleMateriel();">🚜 Matériel</a>
+        <a class="item" onclick="changerOnglet('prospection', this)">🗺️ Prospection</a>
+        <a class="item" onclick="changerOnglet('marche', this)">📈 Bourse & Clients</a>
+        <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
+    </div>
+
+    <div style="display:flex; align-items:center; gap:8px; white-space:nowrap;">
+        <span id="countdown-cloture" class="ui label" style="margin:0;">⏳ Clôture : --h--</span>
+        <a href="/regles.html" class="item" title="Règles & Tutoriel">📖 Règles</a>
+        <a href="#" target="_blank" id="link-tchatgc-game" class="item" title="Salon de discussion">💬 Tchat</a>
+        <a href="/admin/index.html" id="btn-admin-link" class="ui orange mini button" style="display:none; margin:0;">🛡️ Admin</a>
+        <a class="item" onclick="deconnexion()" style="color:#f87171;" title="Déconnexion">🚪 Quitter</a>
     </div>
 </div>
 
