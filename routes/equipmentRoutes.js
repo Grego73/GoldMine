@@ -151,11 +151,16 @@ router.post('/buy-new', requireAuth, async (req, res) => {
         }
 
         await client.query('UPDATE mines SET argent = argent - $1, foreuses = foreuses + 1 WHERE user_id = $2', [prix, userId]);
+        const vMin = parseFloat(item.vitesse_min_th) || 30;
+        const vMax = parseFloat(item.vitesse_max_th) || 60;
+        const vDefaut = Math.round((vMin + vMax) / 2);
+
         await client.query(
-            `INSERT INTO player_fleet (owner_id, catalog_id, nom, categorie, gabarit, prod_tonnes, carburant_jour, usure_jour, pieces_panne, usure_actuelle, statut)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 0, 'ACTIF')`,
-            [userId, item.id, item.nom, item.categorie, item.gabarit || 'Moyen', item.prod_tonnes, item.carburant_jour, item.usure_jour, item.pieces_panne || 1]
+            `INSERT INTO player_fleet (owner_id, catalog_id, nom, categorie, gabarit, prod_tonnes, vitesse_min_th, vitesse_max_th, vitesse_reglee_th, carburant_jour, usure_jour, pieces_panne, usure_actuelle, parcelle_index, statut)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 0, 'ACTIF')`,
+            [userId, item.id, item.nom, item.categorie, item.gabarit || 'Moyen', item.prod_tonnes, vMin, vMax, vDefaut, item.carburant_jour, item.usure_jour, item.pieces_panne || 1]
         );
+
 
 
         const msg = `Achat neuf : ${item.nom} (-${prix.toLocaleString()} €)`;
@@ -352,9 +357,9 @@ router.post('/offer-rental', requireAuth, async (req, res) => {
 
         await client.query(`UPDATE player_fleet SET statut = 'OFFRE_LOC' WHERE id = $1`, [fleetId]);
         await client.query(
-            `INSERT INTO active_rentals (source_type, fleet_id, catalog_id, owner_id, nom, categorie, prod_tonnes, carburant_jour, usure_jour, loyer_jour, jours_restants, statut)
-             VALUES ('PDG', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'DISPONIBLE')`,
-            [fleetId, engin.catalog_id, userId, engin.nom, engin.categorie, engin.prod_tonnes, engin.carburant_jour, engin.usure_jour, loyer, jours]
+            `INSERT INTO active_rentals (source_type, fleet_id, owner_id, nom, categorie, prod_tonnes, vitesse_min_th, vitesse_max_th, vitesse_reglee_th, carburant_jour, usure_jour, loyer_jour, jours_restants, statut)
+             VALUES ('PDG', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'DISPONIBLE')`,
+            [fleetId, userId, engin.nom, engin.categorie, engin.prod_tonnes, engin.vitesse_min_th, engin.vitesse_max_th, engin.vitesse_reglee_th, engin.carburant_jour, engin.usure_jour, loyer, jours]
         );
 
         await client.query('COMMIT');
@@ -392,11 +397,16 @@ router.post('/rent', requireAuth, async (req, res) => {
             const coeff = parseFloat(cfg.coeffLoyerJeu) || 0.08;
             const loyerJour = Math.round(parseFloat(item.prix_neuf) * coeff);
 
+            const vMin = parseFloat(item.vitesse_min_th) || 30;
+            const vMax = parseFloat(item.vitesse_max_th) || 60;
+            const vDefaut = Math.round((vMin + vMax) / 2);
+
             await client.query(
-                `INSERT INTO active_rentals (source_type, catalog_id, renter_id, nom, categorie, prod_tonnes, carburant_jour, usure_jour, loyer_jour, jours_restants, statut)
-                 VALUES ('OFFICIEL', $1, $2, $3, $4, $5, $6, $7, $8, $9, 'EN_COURS')`,
-                [item.id, userId, item.nom, item.categorie, item.prod_tonnes, item.carburant_jour, item.usure_jour, loyerJour, jours]
+                `INSERT INTO active_rentals (source_type, catalog_id, renter_id, nom, categorie, prod_tonnes, vitesse_min_th, vitesse_max_th, vitesse_reglee_th, carburant_jour, usure_jour, loyer_jour, jours_restants, parcelle_index, statut)
+                 VALUES ('OFFICIEL', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 'EN_COURS')`,
+                [item.id, userId, item.nom, item.categorie, item.prod_tonnes, vMin, vMax, vDefaut, item.carburant_jour, item.usure_jour, loyerJour, jours]
             );
+
 
             await client.query('COMMIT');
             return res.json({ success: true, message: `Location officielle validée : ${item.nom} (${loyerJour.toLocaleString()} €/j pendant ${jours}j).` });
@@ -565,6 +575,63 @@ router.post('/fix-breakdown', requireAuth, async (req, res) => {
         res.status(500).json({ error: 'Erreur réparation panne' });
     } finally {
         client.release();
+    }
+});
+// =========================================================================
+// 10. VARIATEUR DE VITESSE : RÉGLER LE DÉBIT EN TONNES/HEURE (T/H)
+// =========================================================================
+router.post('/set-speed', requireAuth, async (req, res) => {
+    const { targetType, targetId, vitesseTh } = req.body; // targetType: 'FLEET' | 'RENTAL'
+    const userId = req.session.userId;
+    const val = parseFloat(vitesseTh);
+    if (isNaN(val)) return res.status(400).json({ error: 'Vitesse invalide.' });
+
+    try {
+        const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
+        const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
+
+        const checkRes = await pool.query(`SELECT id, nom, vitesse_min_th, vitesse_max_th FROM ${table} WHERE id = $1 AND ${ownerCol} = $2`, [targetId, userId]);
+        if (checkRes.rows.length === 0) return res.status(404).json({ error: 'Engin introuvable.' });
+
+        const item = checkRes.rows.at(0);
+        const vMin = parseFloat(item.vitesse_min_th) || 30;
+        const vMax = parseFloat(item.vitesse_max_th) || 60;
+        const vClamped = Math.max(vMin, Math.min(vMax, Math.round(val)));
+
+        await pool.query(`UPDATE ${table} SET vitesse_reglee_th = $1 WHERE id = $2`, [vClamped, targetId]);
+        res.json({ success: true, message: `⚙️ Régime de ${item.nom} réglé à ${vClamped} t/h (${Math.round((vClamped / vMax) * 100)}% de charge).` });
+    } catch (err) {
+        console.error('Erreur /set-speed :', err);
+        res.status(500).json({ error: 'Erreur réglage vitesse' });
+    }
+});
+
+// =========================================================================
+// 11. CHANTIERS : AFFECTER UN ENGIN À UN SECTEUR SONDÉ (A À L)
+// =========================================================================
+router.post('/assign-sector', requireAuth, async (req, res) => {
+    const { targetType, targetId, parcelleIndex } = req.body;
+    const userId = req.session.userId;
+    const pIdx = parseInt(parcelleIndex);
+    if (isNaN(pIdx) || pIdx < 0 || pIdx > 11) return res.status(400).json({ error: 'Secteur invalide.' });
+
+    try {
+        const mineRes = await pool.query('SELECT parcelles FROM mines WHERE user_id = $1', [userId]);
+        const parcelles = mineRes.rows.at(0)?.parcelles || [];
+        const pCible = parcelles.at(pIdx);
+
+        if (!pCible || !pCible.estSondee) {
+            return res.status(400).json({ error: 'Vous devez d’abord sonder ce secteur avant d’y envoyer du matériel !' });
+        }
+
+        const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
+        const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
+
+        await pool.query(`UPDATE ${table} SET parcelle_index = $1 WHERE id = $2 AND ${ownerCol} = $3`, [pIdx, targetId, userId]);
+        res.json({ success: true, message: `🗺️ Engin affecté au chantier ${pCible.nom} !` });
+    } catch (err) {
+        console.error('Erreur /assign-sector :', err);
+        res.status(500).json({ error: 'Erreur affectation secteur' });
     }
 });
 

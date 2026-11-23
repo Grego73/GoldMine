@@ -76,6 +76,8 @@ async function chargerEtatJeu() {
         const data = await res.json();
         CONFIG = data.config;
         etat = data.mine;
+        etat.fleetAll = data.fleet || [];
+        etat.rentalsAll = data.rentals || [];
         market = data.market;
         parcelles = data.mine.parcelles;
 
@@ -159,9 +161,18 @@ function majAffichage(logs = null) {
             return `<div><span style="color:#fbbf24;">[${h}]</span> ${l.details}</div>`;
         }).join('');
     }
+    const elFraisSem = document.getElementById('kpi-frais-semaine');
+    const elFacture = document.getElementById('kpi-facture-attente');
+    const btnFacture = document.getElementById('btn-payer-facture');
+    if (elFraisSem) elFraisSem.innerText = `${Math.round(etat.fraisSemaine || 0).toLocaleString()} €`;
+    if (elFacture) elFacture.innerText = `${Math.round(etat.factureEnAttente || 0).toLocaleString()} €`;
+    if (btnFacture) btnFacture.style.display = (etat.factureEnAttente || 0) > 0 ? 'inline-block' : 'none';
+
     afficherTutoriel();
     dessinerCarte();
     dessinerClientsMarche();
+    if (typeof rendreChantierSecteur === 'function') rendreChantierSecteur(secteurInspecteIdx);
+
 }
 
 function allerVersMissionTutoriel(ongletCible) {
@@ -265,6 +276,7 @@ function dessinerCarte() {
             div.innerHTML = `<div class="ui green label">ACTIF</div><h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div>`;
         } else if (p.estSondee) {
             div.innerHTML = `<div class="ui blue label">SONDÉ</div><h4 style="margin:4px 0;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer: ${CONFIG.coutDemenagement}€</small>`;
+            <button class="ui mini yellow button" style="margin-top:6px;" onclick="ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>
         } else {
             div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;
         }
@@ -424,5 +436,140 @@ setInterval(() => {
     }
 
 }, 1000);
+
+let secteurInspecteIdx = 0;
+
+function ouvrirChantierSecteur(idx) {
+    secteurInspecteIdx = idx;
+    rendreChantierSecteur(idx);
+}
+
+function rendreChantierSecteur(idx) {
+    const panel = document.getElementById('sector-chantier-panel');
+    if (!panel || !Array.isArray(parcelles)) return;
+
+    const p = parcelles.at(idx);
+    if (!p || !p.estSondee) {
+        panel.style.display = 'none';
+        return;
+    }
+
+    panel.style.display = 'block';
+    document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} (Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(p.reserveReelle).toLocaleString()} t)`;
+
+    const fleetAll = [
+        ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []).map(f => ({ ...f, targetType: 'FLEET' })),
+        ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : []).map(r => ({ ...r, targetType: 'RENTAL' }))
+    ];
+
+    const affectes = fleetAll.filter(e => parseInt(e.parcelle_index) === idx);
+    const autres = fleetAll.filter(e => parseInt(e.parcelle_index) !== idx);
+
+    // Calcul des 4 débits horaires (t/h)
+    const debits = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
+    for (const e of affectes) {
+        const v = parseFloat(e.vitesse_reglee_th) || 45;
+        const cat = (e.categorie || '').toLowerCase();
+        if (cat.includes('transport')) debits.Transport += v;
+        else if (cat.includes('traitement')) debits.Traitement += v;
+        else if (cat.includes('lavage')) debits.Lavage += v;
+        else debits.Excavation += v;
+    }
+
+    const debitReel = Math.min(debits.Excavation, debits.Transport, debits.Traitement, debits.Lavage);
+    const maillons = [
+        { nom: '⛏️ Excavation', val: debits.Excavation },
+        { nom: '🚛 Transport', val: debits.Transport },
+        { nom: '⚙️ Traitement', val: debits.Traitement },
+        { nom: '💧 Lavage', val: debits.Lavage }
+    ];
+
+    document.getElementById('sector-debits-grid').innerHTML = maillons.map(m => {
+        const isMin = m.val === debitReel;
+        return `
+            <div class="ui inverted segment" style="border-bottom: 3px solid ${m.val === 0 ? '#ef4444' : isMin ? '#fbbf24' : '#34d399'};">
+                <div style="font-size:0.88em; color:#a8a29e;">${m.nom}</div>
+                <div style="font-size:1.3em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'};">${m.val} t/h</div>
+                <div style="font-size:0.8em; color:#d6d3d1;">${isMin ? '⚠️ Maillon limitant' : '✅ Capacité suffisante'}</div>
+            </div>
+        `;
+    }).join('');
+
+    const alertEl = document.getElementById('sector-bottleneck-alert');
+    if (debitReel <= 0) {
+        alertEl.innerHTML = `<span class="ui red label">🚨 Chaîne incomplète (0 t/h) : affectez au moins 1 engin dans chaque famille (Excavation, Transport, Traitement, Lavage) sur ce secteur !</span>`;
+    } else {
+        const orHeure = +(debitReel * p.pureteReelle).toFixed(1);
+        alertEl.innerHTML = `<span class="ui green label">✅ Débit effectif de la chaîne : ${debitReel} t/h (~${orHeure} g d'or brut / heure)</span>`;
+    }
+
+    // Tableau des engins affectés avec variateur de vitesse (t/h)
+    const tbody = document.getElementById('sector-assigned-tbody');
+    if (affectes.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur.</td></tr>';
+    } else {
+        const optionsSecteurs = parcelles.map((sec, sIdx) => sec.estSondee ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
+        tbody.innerHTML = affectes.map(e => {
+            const vMin = parseFloat(e.vitesse_min_th) || 30;
+            const vMax = parseFloat(e.vitesse_max_th) || 60;
+            const vReg = parseFloat(e.vitesse_reglee_th) || vMin;
+            const pct = Math.round((vReg / vMax) * 100);
+            return `
+                <tr>
+                    <td><strong>${e.nom}</strong><br><small style="color:#a8a29e;">${e.categorie} (${e.gabarit || 'Moyen'})</small></td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px;">
+                            <input type="number" id="spd-${e.targetType}-${e.id}" min="${vMin}" max="${vMax}" value="${vReg}" style="width:72px; padding:4px;">
+                            <span>t/h (${pct}%)</span>
+                            <button class="ui mini yellow button" onclick="reglerVitesseEngin('${e.targetType}', ${e.id}, document.getElementById('spd-${e.targetType}-${e.id}').value)">OK</button>
+                        </div>
+                        <small style="color:#a8a29e;">Plage : ${vMin} à ${vMax} t/h</small>
+                    </td>
+                    <td>Usure : <strong>${Math.round(e.usure_actuelle || 0)}%</strong></td>
+                    <td>
+                        <select onchange="affecterEnginSecteur('${e.targetType}', ${e.id}, this.value)">
+                            ${optionsSecteurs}
+                        </select>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    // Boutons pour affecter rapidement un engin depuis un autre secteur
+    const availEl = document.getElementById('sector-available-fleet');
+    if (autres.length === 0) {
+        availEl.innerHTML = '<span style="color:#a8a29e; font-size:0.9em;">Tous vos engins actifs sont déjà sur ce secteur.</span>';
+    } else {
+        availEl.innerHTML = autres.map(e => `
+            <button class="ui mini blue button" onclick="affecterEnginSecteur('${e.targetType}', ${e.id}, ${idx})">
+                ➕ ${e.nom} (${e.categorie} - ${e.vitesse_reglee_th} t/h)
+            </button>
+        `).join('');
+    }
+}
+
+async function reglerVitesseEngin(targetType, targetId, vitesseTh) {
+    const res = await fetch('/api/equipment/set-speed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType, targetId, vitesseTh })
+    });
+    const data = await res.json();
+    afficherToast(data.message || data.error, !data.success);
+    if (data.success) await chargerEtatJeu();
+}
+
+async function affecterEnginSecteur(targetType, targetId, parcelleIndex) {
+    const res = await fetch('/api/equipment/assign-sector', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType, targetId, parcelleIndex })
+    });
+    const data = await res.json();
+    afficherToast(data.message || data.error, !data.success);
+    if (data.success) await chargerEtatJeu();
+}
+
 
 chargerEtatJeu();

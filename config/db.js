@@ -38,6 +38,10 @@ async function initDB() {
                 stock_or NUMERIC DEFAULT 0,
                 mineurs INTEGER DEFAULT 5,
                 foreuses INTEGER DEFAULT 1,
+                conducteurs INTEGER DEFAULT 2,
+                mecaniciens INTEGER DEFAULT 1,
+                chefs_equipe INTEGER DEFAULT 1,
+                cadres JSONB DEFAULT '[]',
                 moral NUMERIC DEFAULT 80,
                 usure NUMERIC DEFAULT 0,
                 cadence NUMERIC DEFAULT 1.0,
@@ -45,21 +49,13 @@ async function initDB() {
                 parcelle_active INTEGER DEFAULT 0,
                 parcelles JSONB NOT NULL,
                 pending_event JSONB DEFAULT NULL,
+                tutorial_step INTEGER DEFAULT 1,
+                pieces_detachees INTEGER DEFAULT 2,
+                pieces_stock JSONB DEFAULT '{}',
+                frais_semaine_accumules NUMERIC DEFAULT 0,
+                facture_en_attente NUMERIC DEFAULT 0,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
-        `);
-        await client.query(`
-            ALTER TABLE mines ADD COLUMN IF NOT EXISTS tutorial_step INTEGER DEFAULT 1;
-        `);
-        await client.query(`
-            ALTER TABLE mines ADD COLUMN IF NOT EXISTS pieces_detachees INTEGER DEFAULT 2;
-            ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS gabarit VARCHAR(20) DEFAULT 'Moyen';
-            ALTER TABLE equipment_catalog ADD COLUMN IF NOT EXISTS pieces_panne INTEGER DEFAULT 1;
-            ALTER TABLE player_fleet ADD COLUMN IF NOT EXISTS gabarit VARCHAR(20) DEFAULT 'Moyen';
-            ALTER TABLE player_fleet ADD COLUMN IF NOT EXISTS pieces_panne INTEGER DEFAULT 1;
-        `);
-        await client.query(`
-            ALTER TABLE mines ADD COLUMN IF NOT EXISTS pieces_stock JSONB DEFAULT '{}';
         `);
 
         // 3. État mondial de la Bourse & Horloge du serveur
@@ -69,7 +65,9 @@ async function initDB() {
                 cours_or NUMERIC NOT NULL,
                 historique_cours JSONB DEFAULT '[]',
                 last_market_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_daily_tick DATE DEFAULT CURRENT_DATE
+                last_daily_tick DATE DEFAULT CURRENT_DATE,
+                last_hourly_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_weekly_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
 
@@ -142,20 +140,20 @@ async function initDB() {
             );
         `);
 
-        // =====================================================================
-        // TABLES V1.1.0 : BOUTIQUE NEUF, BROCANTE/ENCHÈRES & LOCATION
-        // =====================================================================
-
         // 9. Catalogue des engins neufs (géré en Admin)
         await client.query(`
             CREATE TABLE IF NOT EXISTS equipment_catalog (
                 id SERIAL PRIMARY KEY,
                 nom VARCHAR(100) UNIQUE NOT NULL,
                 categorie VARCHAR(50) NOT NULL,
+                gabarit VARCHAR(20) DEFAULT 'Moyen',
                 prix_neuf NUMERIC NOT NULL,
                 prod_tonnes NUMERIC NOT NULL,
+                vitesse_min_th NUMERIC DEFAULT 30,
+                vitesse_max_th NUMERIC DEFAULT 60,
                 carburant_jour NUMERIC NOT NULL,
                 usure_jour NUMERIC NOT NULL,
+                pieces_panne INTEGER DEFAULT 1,
                 actif BOOLEAN DEFAULT TRUE
             );
         `);
@@ -168,10 +166,16 @@ async function initDB() {
                 catalog_id INTEGER REFERENCES equipment_catalog(id),
                 nom VARCHAR(100) NOT NULL,
                 categorie VARCHAR(50) NOT NULL,
+                gabarit VARCHAR(20) DEFAULT 'Moyen',
                 prod_tonnes NUMERIC NOT NULL,
+                vitesse_min_th NUMERIC DEFAULT 30,
+                vitesse_max_th NUMERIC DEFAULT 60,
+                vitesse_reglee_th NUMERIC DEFAULT 45,
                 carburant_jour NUMERIC NOT NULL,
                 usure_jour NUMERIC NOT NULL,
+                pieces_panne INTEGER DEFAULT 1,
                 usure_actuelle NUMERIC DEFAULT 0,
+                parcelle_index INTEGER DEFAULT 0,
                 statut VARCHAR(30) DEFAULT 'ACTIF',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -204,10 +208,14 @@ async function initDB() {
                 nom VARCHAR(100) NOT NULL,
                 categorie VARCHAR(50) NOT NULL,
                 prod_tonnes NUMERIC NOT NULL,
+                vitesse_min_th NUMERIC DEFAULT 30,
+                vitesse_max_th NUMERIC DEFAULT 60,
+                vitesse_reglee_th NUMERIC DEFAULT 45,
                 carburant_jour NUMERIC NOT NULL,
                 usure_jour NUMERIC NOT NULL,
                 loyer_jour NUMERIC NOT NULL,
                 jours_restants INTEGER NOT NULL,
+                parcelle_index INTEGER DEFAULT 0,
                 statut VARCHAR(20) DEFAULT 'DISPONIBLE',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
@@ -220,7 +228,7 @@ async function initDB() {
         }
 
         await client.query('COMMIT');
-        console.log('✅ Structure PostgreSQL V1.1.0 vérifiée avec succès.');
+        console.log('✅ Structure PostgreSQL propre initialisée avec succès.');
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('❌ Erreur initialisation DB (basculer en maintenance) :', err.message);

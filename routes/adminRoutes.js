@@ -115,17 +115,21 @@ router.get('/equipment-catalog', requireAdmin, async (req, res) => {
 });
 
 router.post('/equipment-catalog', requireAdmin, async (req, res) => {
-    const { nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne } = req.body;
+    const { nom, categorie, gabarit, prix_neuf, vitesse_min_th, vitesse_max_th, carburant_jour, usure_jour, pieces_panne } = req.body;
     if (!nom || !categorie) return res.status(400).json({ error: 'Nom et catégorie requis' });
 
+    const vMin = parseFloat(vitesse_min_th) || 30;
+    const vMax = parseFloat(vitesse_max_th) || 60;
+    const prod24h = Math.round(((vMin + vMax) / 2) * 24);
+
     await pool.query(
-        `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne, actif)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+        `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, vitesse_min_th, vitesse_max_th, carburant_jour, usure_jour, pieces_panne, actif)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
          ON CONFLICT (nom) DO UPDATE SET
-         categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, carburant_jour = $6, usure_jour = $7, pieces_panne = $8, actif = TRUE`,
-        [nom.trim(), categorie.trim(), (gabarit || 'Moyen').trim(), parseFloat(prix_neuf), parseFloat(prod_tonnes), parseFloat(carburant_jour), parseFloat(usure_jour), parseInt(pieces_panne) || 1]
+         categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, vitesse_min_th = $6, vitesse_max_th = $7, carburant_jour = $8, usure_jour = $9, pieces_panne = $10, actif = TRUE`,
+        [nom.trim(), categorie.trim(), (gabarit || 'Moyen').trim(), parseFloat(prix_neuf), prod24h, vMin, vMax, parseFloat(carburant_jour), parseFloat(usure_jour), parseInt(pieces_panne) || 1]
     );
-    await logAdmin(req.adminUsername, `Ajout/MAJ engin catalogue : ${nom} (${gabarit || 'Moyen'})`);
+    await logAdmin(req.adminUsername, `Ajout/MAJ engin catalogue : ${nom} (${vMin}-${vMax} t/h)`);
     res.json({ success: true });
 });
 
@@ -140,17 +144,21 @@ router.post('/equipment-catalog-bulk', requireAdmin, async (req, res) => {
         let count = 0;
         for (const it of items) {
             if (!it.nom || !it.categorie || isNaN(parseFloat(it.prix_neuf))) continue;
+            const vMin = parseFloat(it.vitesse_min_th) || 30;
+            const vMax = parseFloat(it.vitesse_max_th) || 60;
+            const prod24h = Math.round(((vMin + vMax) / 2) * 24);
+
             await client.query(
-                `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, carburant_jour, usure_jour, pieces_panne, actif)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+                `INSERT INTO equipment_catalog (nom, categorie, gabarit, prix_neuf, prod_tonnes, vitesse_min_th, vitesse_max_th, carburant_jour, usure_jour, pieces_panne, actif)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)
                  ON CONFLICT (nom) DO UPDATE SET
-                 categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, carburant_jour = $6, usure_jour = $7, pieces_panne = $8, actif = TRUE`,
-                [it.nom.trim(), it.categorie.trim(), (it.gabarit || 'Moyen').trim(), parseFloat(it.prix_neuf), parseFloat(it.prod_tonnes), parseFloat(it.carburant_jour), parseFloat(it.usure_jour), parseInt(it.pieces_panne) || 1]
+                 categorie = $2, gabarit = $3, prix_neuf = $4, prod_tonnes = $5, vitesse_min_th = $6, vitesse_max_th = $7, carburant_jour = $8, usure_jour = $9, pieces_panne = $10, actif = TRUE`,
+                [it.nom.trim(), it.categorie.trim(), (it.gabarit || 'Moyen').trim(), parseFloat(it.prix_neuf), prod24h, vMin, vMax, parseFloat(it.carburant_jour), parseFloat(it.usure_jour), parseInt(it.pieces_panne) || 1]
             );
             count += 1;
         }
         await client.query('COMMIT');
-        await logAdmin(req.adminUsername, `Import massif de ${count} engins au catalogue`);
+        await logAdmin(req.adminUsername, `Import massif de ${count} engins à vitesse variable`);
         res.json({ success: true, count });
     } catch (err) {
         await client.query('ROLLBACK');

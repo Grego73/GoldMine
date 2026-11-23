@@ -205,11 +205,15 @@ function rendreLocationEngins() {
                     <td>${item.carburant_jour} €/j</td>
                     <td class="money-text">~${loyerEstime.toLocaleString()} €/j</td>
                     <td>
-                        <div style="display:flex; gap:6px; align-items:center;">
-                            <input type="number" id="rent-days-${item.id}" min="1" max="7" value="2" style="width:65px; padding:5px;"> <span>j</span>
-                            <button class="ui mini blue button" onclick="louerOfficiel(${item.id}, document.getElementById('rent-days-${item.id}').value)">🤝 Louer</button>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                            <strong>${item.nom}</strong>
+                            <div style="display:flex; gap:5px;">
+                                <span class="ui blue label">${item.categorie}</span>
+                                <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
+                            </div>
                         </div>
                     </td>
+
                 </tr>
             `;
         }).join('');

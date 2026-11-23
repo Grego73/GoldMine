@@ -135,7 +135,7 @@ async function chargerCatalogueEngins() {
             <td><span class="ui blue label">${e.categorie}</span></td>
             <td><span class="ui yellow label">${e.gabarit || 'Moyen'}</span></td>
             <td class="money-text">${Math.round(e.prix_neuf).toLocaleString()} €</td>
-            <td>${e.prod_tonnes} t/j</td>
+            <td><strong>${e.vitesse_min_th || 30} à ${e.vitesse_max_th || 60} t/h</strong></td>
             <td>${e.carburant_jour} €/j</td>
             <td>${e.usure_jour}% /j</td>
             <td>🔧 ${e.pieces_panne || 1}</td>
@@ -152,15 +152,15 @@ async function importerEnginsEnMasse() {
     const items = [];
     for (const line of lines) {
         const p = line.split(';').map(x => x.trim());
-        if (p.length >= 8) {
+        if (p.length >= 9) {
             items.push({
                 nom: p.at(0), categorie: p.at(1), gabarit: p.at(2),
-                prix_neuf: p.at(3), prod_tonnes: p.at(4), carburant_jour: p.at(5),
-                usure_jour: p.at(6), pieces_panne: p.at(7)
+                prix_neuf: p.at(3), vitesse_min_th: p.at(4), vitesse_max_th: p.at(5),
+                carburant_jour: p.at(6), usure_jour: p.at(7), pieces_panne: p.at(8)
             });
         }
     }
-    if (items.length === 0) return notifAdmin('Format invalide (8 colonnes séparées par ; requises).', true);
+    if (items.length === 0) return notifAdmin('Format invalide (9 colonnes séparées par ; requises).', true);
 
     const res = await fetch('/api/admin/equipment-catalog-bulk', {
         method: 'POST',
@@ -170,15 +170,15 @@ async function importerEnginsEnMasse() {
     const data = await res.json();
     if (data.success) {
         document.getElementById('bulk-eq-text').value = '';
-        notifAdmin(`✅ ${data.count} engins importés au catalogue !`);
+        notifAdmin(`✅ ${data.count} engins importés avec plages t/h !`);
         chargerCatalogueEngins();
     }
 }
 
 function exporterEngins() {
-    const txt = currentEqList.map(e => `${e.nom} ; ${e.categorie} ; ${e.gabarit || 'Moyen'} ; ${e.prix_neuf} ; ${e.prod_tonnes} ; ${e.carburant_jour} ; ${e.usure_jour} ; ${e.pieces_panne || 1}`).join('\n');
+    const txt = currentEqList.map(e => `${e.nom} ; ${e.categorie} ; ${e.gabarit || 'Moyen'} ; ${e.prix_neuf} ; ${e.vitesse_min_th || 30} ; ${e.vitesse_max_th || 60} ; ${e.carburant_jour} ; ${e.usure_jour} ; ${e.pieces_panne || 1}`).join('\n');
     document.getElementById('bulk-eq-text').value = txt;
-    notifAdmin('📤 Catalogue engins extrait dans la zone ci-dessus !');
+    notifAdmin('📤 Catalogue engins extrait !');
 }
 
 async function ajouterEnginCatalogue() {

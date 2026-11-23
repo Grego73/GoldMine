@@ -73,7 +73,17 @@
         <div class="ui two column grid">
             <div class="ui segment mine-card">
                 <h3 class="ui dividing header mine-header">⚙️ Pilotage & Équipe</h3>
-                <p style="font-size:0.88em; color:#a8a29e;">Clôture quotidienne à <strong id="info-heure-cloture">3h00</strong> | Cycle marché : <strong id="info-cycle-heures">4</strong>h</p>
+                <div class="ui inverted segment" style="margin-bottom:12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                        <div>
+                            <span style="color:#a8a29e; font-size:0.88em;">Frais en cours (semaine) :</span>
+                            <strong id="kpi-frais-semaine" style="color:#fbbf24;">0 €</strong>
+                            <span style="margin-left:10px; color:#a8a29e; font-size:0.88em;">Facture à payer :</span>
+                            <strong id="kpi-facture-attente" style="color:#f87171;">0 €</strong>
+                        </div>
+                        <button id="btn-payer-facture" class="ui mini red button" style="display:none;" onclick="actionMine('payer_facture')">🧾 Payer la facture</button>
+                    </div>
+                </div>
                 
                 <div class="ui form">
                     <div class="field">
@@ -208,6 +218,24 @@
             <h3 class="ui dividing header mine-header">🗺️ Cadastre des 12 Concessions</h3>
             <p id="desc-prospection" style="color:#d6d3d1;"></p>
             <div id="mapGrid" class="pit-grid"></div>
+            <!-- PANNEAU CHANTIER PAR SECTEUR (4 DÉBITS + ENGINS AFFECTÉS) -->
+            <div id="sector-chantier-panel" class="ui segment mine-card" style="margin-top:20px; display:none;">
+                <h3 class="ui dividing header mine-header" id="sector-chantier-title">🏗️ Chantier — Secteur A</h3>
+                <p id="sector-bottleneck-alert" style="margin-bottom:14px;"></p>
+
+                <div class="ui four column grid" id="sector-debits-grid" style="margin-bottom:18px;"></div>
+
+                <h4 style="color:#fbbf24; margin-bottom:8px;">🚜 Engins affectés à ce secteur (Variateur t/h)</h4>
+                <table class="ui table" style="margin-bottom:18px;">
+                    <thead>
+                        <tr><th>Engin & Maillon</th><th>Régime (t/h)</th><th>Usure / État</th><th>Déplacer vers</th></tr>
+                    </thead>
+                    <tbody id="sector-assigned-tbody"></tbody>
+                </table>
+
+                <h4 style="color:#34d399; margin-bottom:8px;">➕ Affecter un autre engin disponible de ma flotte</h4>
+                <div id="sector-available-fleet" style="display:flex; flex-wrap:wrap; gap:8px;"></div>
+            </div>
         </div>
     </div>
 

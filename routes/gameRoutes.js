@@ -70,9 +70,14 @@ router.get('/state', requireAuth, async (req, res) => {
             marge_acceptee_max: etudeDebloquee ? parseFloat(c.marge_acceptee_max) : null
         }));
 
+        const fleetSectorRes = await pool.query(`SELECT * FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' ORDER BY id ASC`, [req.session.userId]);
+        const rentalsSectorRes = await pool.query(`SELECT * FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS' ORDER BY id ASC`, [req.session.userId]);
+
         res.json({
             user: userRes.rows[0],
             config: cfg,
+            fleet: fleetSectorRes.rows,
+            rentals: rentalsSectorRes.rows,
             mine: {
                 jour: mine.jour,
                 argent: parseFloat(mine.argent),
@@ -86,7 +91,9 @@ router.get('/state', requireAuth, async (req, res) => {
                 parcelleActive: mine.parcelle_active,
                 parcelles: mine.parcelles,
                 pendingEvent: mine.pending_event,
-                tutorialStep: mine.tutorial_step || 1
+                tutorialStep: mine.tutorial_step || 1,
+                fraisSemaine: parseFloat(mine.frais_semaine_accumules) || 0,
+                factureEnAttente: parseFloat(mine.facture_en_attente) || 0
             },
 
             market: {
@@ -172,12 +179,14 @@ router.post('/action', requireAuth, async (req, res) => {
             if (!p || id === parcelleActive) return res.status(400).json({ error: 'Parcelle invalide' });
 
             if (!p.estSondee) {
-                if (argent < cfg.coutCarottage) return res.status(400).json({ error: 'Trésorerie insuffisante' });
-                argent -= cfg.coutCarottage;
+                const hasGeologue = Array.isArray(mine.cadres) && mine.cadres.includes('GEOLOGUE');
+                const coutCarottageReel = hasGeologue ? Math.round(cfg.coutCarottage * 0.7) : cfg.coutCarottage;
+                if (argent < coutCarottageReel) return res.status(400).json({ error: 'Trésorerie insuffisante' });
+                argent -= coutCarottageReel;
                 p.estSondee = true;
                 const erreur = (Math.random() * 0.4) - 0.2;
                 p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
-                message = `Carottage ${p.nom} : teneur estimée à ~${p.estimationPurete} g/t (-${cfg.coutCarottage} €).`;
+                message = `Carottage ${p.nom} : teneur estimée à ~${p.estimationPurete} g/t (-${coutCarottageReel} €).`;
                 await logJoueur(userId, username, 'PROSPECTION', message);
             } else {
                 if (argent < cfg.coutDemenagement) return res.status(400).json({ error: 'Trésorerie insuffisante' });
@@ -186,6 +195,14 @@ router.post('/action', requireAuth, async (req, res) => {
                 message = `Déménagement vers ${p.nom} (teneur réelle : ${p.pureteReelle} g/t / -${cfg.coutDemenagement} €).`;
                 await logJoueur(userId, username, 'PROSPECTION', message);
             }
+        } else if (type === 'payer_facture') {
+            const facture = parseFloat(mine.facture_en_attente) || 0;
+            if (facture <= 0) return res.status(400).json({ error: 'Aucune facture en attente de paiement.' });
+            if (argent < facture) return res.status(400).json({ error: 'Trésorerie insuffisante pour régler la facture.' });
+            argent -= facture;
+            await pool.query('UPDATE mines SET facture_en_attente = 0 WHERE user_id = $1', [userId]);
+            message = `🧾 Facture hebdomadaire réglée (-${Math.round(facture).toLocaleString()} €).`;
+            await logJoueur(userId, username, 'FINANCE', message);
         } else {
             return res.status(400).json({ error: 'Action inconnue' });
         }
@@ -274,9 +291,10 @@ router.post('/sell-client', requireAuth, async (req, res) => {
         // Succès de la vente !
         const prixUnitaire = +(parseFloat(acheteur.prix_base_gramme) * (1 + marge)).toFixed(2);
         const brut = qte * prixUnitaire;
-        const taxe = brut * (cfg.taxeMiniere || 0.08);
+        const taxeBase = cfg.taxeMiniere || 0.08;
+        const hasDAF = Array.isArray(mine.cadres) && mine.cadres.includes('DAF');
+        const taxe = brut * (hasDAF ? Math.max(0, taxeBase - 0.02) : taxeBase);
         const net = +(brut - taxe).toFixed(2);
-
         const newStock = +(stockOr - qte).toFixed(1);
         const newArgent = +(parseFloat(mine.argent) + net).toFixed(2);
         const newDemande = +(demande - qte).toFixed(1);
@@ -406,7 +424,7 @@ router.post('/claim-tutorial', requireAuth, async (req, res) => {
             nomMission = 'Campagne commerciale (20 pts de notoriété)';
         } else if (step === 5) {
             // Étape 5 : Avoir effectué au moins une vente d'or
-            const venteRes = await client.query(`SELECT COUNT(*) FROM player_logs WHERE user_id = $1 AND category = 'VENTE'`, [userId]);
+            const venteRes = await client.query(`SELECT COUNT(*) FROM player_logs WHERE user_id = $1 AND category = 'FINANCE' AND details LIKE '💰 Vente%'`, [userId]);
             conditionRemplie = parseInt(venteRes.rows.at(0).count) >= 1;
             nomMission = 'Première vente de lingots sur le marché';
         }
