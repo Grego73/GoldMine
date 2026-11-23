@@ -10,20 +10,25 @@ function requireAuth(req, res, next) {
     next();
 }
 
+const FAMILLES_MATERIEL = ['Excavation', 'Transport', 'Chargement', 'Convoyage', 'Traitement', 'Lavage'];
+
 function calculerPrixPiece(cfg, categorie, gabarit) {
     const cat = (categorie || '').toLowerCase();
-    let base = parseFloat(cfg.prixPieceExcavation);
-    if (cat.includes('transport')) base = parseFloat(cfg.prixPieceTransport);
-    else if (cat.includes('traitement')) base = parseFloat(cfg.prixPieceTraitement);
-    else if (cat.includes('lavage')) base = parseFloat(cfg.prixPieceLavage);
+    let base = parseFloat(cfg.prixPieceExcavation) || 500;
+    if (cat.includes('transport')) base = parseFloat(cfg.prixPieceTransport) || 600;
+    else if (cat.includes('charg')) base = parseFloat(cfg.prixPieceChargement) || 550;
+    else if (cat.includes('convoy')) base = parseFloat(cfg.prixPieceConvoyage) || 500;
+    else if (cat.includes('traitement')) base = parseFloat(cfg.prixPieceTraitement) || 800;
+    else if (cat.includes('lavage')) base = parseFloat(cfg.prixPieceLavage) || 900;
 
     const gab = (gabarit || 'Moyen').toLowerCase();
-    let coeff = parseFloat(cfg.coeffPieceMoyen);
-    if (gab === 'petit') coeff = parseFloat(cfg.coeffPiecePetit);
-    else if (gab.includes('g')) coeff = parseFloat(cfg.coeffPieceGeant);
+    let coeff = parseFloat(cfg.coeffPieceMoyen) || 2;
+    if (gab === 'petit') coeff = parseFloat(cfg.coeffPiecePetit) || 1;
+    else if (gab.includes('g')) coeff = parseFloat(cfg.coeffPieceGeant) || 4;
 
     return Math.round(base * coeff);
 }
+
 
 // =========================================================================
 // 1. ÉTAT COMPLET DU MATÉRIEL (Ma Flotte, Boutique, Brocante/Enchères, Location)
@@ -71,28 +76,14 @@ router.get('/', requireAuth, async (req, res) => {
         const mineInfoRes = await pool.query('SELECT pieces_stock FROM mines WHERE user_id = $1', [userId]);
         const piecesStock = mineInfoRes.rows.at(0)?.pieces_stock || {};
 
-        const tarifsPieces = {
-            Excavation: {
-                Petit: calculerPrixPiece(cfg, 'Excavation', 'Petit'),
-                Moyen: calculerPrixPiece(cfg, 'Excavation', 'Moyen'),
-                Géant: calculerPrixPiece(cfg, 'Excavation', 'Géant')
-            },
-            Transport: {
-                Petit: calculerPrixPiece(cfg, 'Transport', 'Petit'),
-                Moyen: calculerPrixPiece(cfg, 'Transport', 'Moyen'),
-                Géant: calculerPrixPiece(cfg, 'Transport', 'Géant')
-            },
-            Traitement: {
-                Petit: calculerPrixPiece(cfg, 'Traitement', 'Petit'),
-                Moyen: calculerPrixPiece(cfg, 'Traitement', 'Moyen'),
-                Géant: calculerPrixPiece(cfg, 'Traitement', 'Géant')
-            },
-            Lavage: {
-                Petit: calculerPrixPiece(cfg, 'Lavage', 'Petit'),
-                Moyen: calculerPrixPiece(cfg, 'Lavage', 'Moyen'),
-                Géant: calculerPrixPiece(cfg, 'Lavage', 'Géant')
-            }
-        };
+        const tarifsPieces = {};
+        for (const fam of FAMILLES_MATERIEL) {
+            tarifsPieces[fam] = {
+                Petit: calculerPrixPiece(cfg, fam, 'Petit'),
+                Moyen: calculerPrixPiece(cfg, fam, 'Moyen'),
+                Géant: calculerPrixPiece(cfg, fam, 'Géant')
+            };
+        }
 
         res.json({
             piecesStock,
@@ -104,6 +95,7 @@ router.get('/', requireAuth, async (req, res) => {
             rentalOffers: offersRes.rows,
             myActiveRentals: myRentalsRes.rows
         });
+
 
     } catch (err) {
         console.error('Erreur GET /api/equipment :', err);
@@ -523,7 +515,7 @@ router.post('/buy-parts', requireAuth, async (req, res) => {
     const userId = req.session.userId;
     const cfg = getGameConfig();
 
-    const famNorm = ['Excavation', 'Transport', 'Traitement', 'Lavage'].find(f => f.toLowerCase() === (categorie || '').toLowerCase());
+    const famNorm = FAMILLES_MATERIEL.find(f => f.toLowerCase() === (categorie || '').toLowerCase());
     const gabNorm = ['Petit', 'Moyen', 'Géant'].find(g => g.toLowerCase() === (gabarit || '').toLowerCase());
     if (!famNorm || !gabNorm) return res.status(400).json({ error: 'Concessionnaire ou gabarit invalide.' });
 
@@ -581,7 +573,7 @@ router.post('/fix-breakdown', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Cet engin n’est pas en panne.' });
         }
 
-        const famNorm = ['Excavation', 'Transport', 'Traitement', 'Lavage'].find(f => (engin.categorie || '').toLowerCase().includes(f.toLowerCase())) || 'Excavation';
+        const famNorm = FAMILLES_MATERIEL.find(f => (engin.categorie || '').toLowerCase().includes(f.toLowerCase())) || 'Excavation';
         const gabNorm = engin.gabarit || 'Moyen';
         const stockKey = `${famNorm}:${gabNorm}`;
         const piecesRequises = parseInt(engin.pieces_panne) || 1;

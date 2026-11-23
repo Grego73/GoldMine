@@ -273,6 +273,46 @@ async function reclamerTutoriel() {
     if (data.success) await chargerEtatJeu();
 }
 
+function calculerStatsSecteur(idx) {
+    const p = parcelles.at(idx);
+    const fleetAll = [
+        ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []).map(f => ({ ...f, targetType: 'FLEET' })),
+        ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : []).map(r => ({ ...r, targetType: 'RENTAL' }))
+    ];
+    const affectes = fleetAll.filter(e => parseInt(e.parcelle_index) === idx);
+
+    const debits = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+    const counts = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+
+    for (const e of affectes) {
+        const v = parseFloat(e.vitesse_reglee_th) || 0;
+        const cat = (e.categorie || '').toLowerCase();
+        if (cat.includes('transport')) { debits.Transport += v; counts.Transport += 1; }
+        else if (cat.includes('charg')) { debits.Chargement += v; counts.Chargement += 1; }
+        else if (cat.includes('convoy')) { debits.Convoyage += v; counts.Convoyage += 1; }
+        else if (cat.includes('traitement')) { debits.Traitement += v; counts.Traitement += 1; }
+        else if (cat.includes('lavage')) { debits.Lavage += v; counts.Lavage += 1; }
+        else { debits.Excavation += v; counts.Excavation += 1; }
+    }
+
+    // Chaîne en 6 étapes dans l'ordre : Excavation -> Transport -> Chargement -> Convoyage -> Traitement -> Lavage
+    const debitAmont = Math.min(debits.Excavation, debits.Transport, debits.Chargement, debits.Convoyage);
+    const debitTraitement = Math.min(debitAmont, debits.Traitement);
+    const debitChaine = Math.min(debitTraitement, debits.Lavage);
+
+    const debitMax = Math.max(debits.Excavation, debits.Transport, debits.Chargement, debits.Convoyage, debits.Traitement, debits.Lavage);
+    const estEquilibre = debitChaine > 0 && debitChaine === debitMax;
+
+    let debitMineurs = 0;
+    if (p && p.id === etat.parcelleActive && (parseFloat(etat.moral) || 100) >= 25) {
+        const prodJour = (parseInt(etat.mineurs) || 0) * (parseFloat(CONFIG.prodMineurTonnes) || 1.5);
+        debitMineurs = +((prodJour / 24) * (parseFloat(etat.cadence) || 1) * ((parseFloat(etat.moral) || 100) / 100)).toFixed(2);
+    }
+
+    const totalTerreTh = +(debitChaine + debitMineurs).toFixed(2);
+    return { affectes, debits, counts, debitChaine, debitMax, estEquilibre, debitMineurs, totalTerreTh };
+}
+
 function dessinerCarte() {
     const grid = document.getElementById('mapGrid');
     if (!grid) return;
@@ -280,17 +320,46 @@ function dessinerCarte() {
     parcelles.forEach((p, i) => {
         const div = document.createElement('div');
         div.className = 'pit-tile' + (p.id === etat.parcelleActive ? ' active' : '') + (p.reserveReelle <= 0 ? ' depleted' : '');
-        if (p.id === etat.parcelleActive) {
-            div.innerHTML = `<div class="ui green label">ACTIF</div><h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4><div>${Math.round(p.reserveReelle)} t (${p.pureteReelle}g/t)</div><button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
-        } else if (p.estSondee) {
-            div.innerHTML = `<div class="ui blue label">SONDÉ</div><h4 style="margin:4px 0;">${p.nom}</h4><div>Est: ~${p.estimationPurete} g/t</div><small style="color:#a8a29e;">Déplacer: ${CONFIG.coutDemenagement}€</small><br><button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
+
+        if (p.estSondee) {
+            const st = calculerStatsSecteur(i);
+            const detailMat = `⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🚜${st.counts.Chargement} 📥${st.counts.Convoyage} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
+            const badgeTop = p.id === etat.parcelleActive
+                ? '<div class="ui green label">ACTIF</div>'
+                : '<div class="ui blue label">SONDÉ</div>';
+
+            const infoTeneur = p.id === etat.parcelleActive
+                ? `${Math.round(p.reserveReelle)} t (${p.pureteReelle} g/t)`
+                : `Est: ~${p.estimationPurete} g/t | Dépl: ${CONFIG.coutDemenagement}€`;
+
+            const badgeEquilibre = st.affectes.length === 0
+                ? `<span style="color:#a8a29e;">Aucun engin</span>`
+                : st.debitChaine === 0
+                ? `<span style="color:#f87171;">⚠️ Chaîne incomplète</span>`
+                : st.estEquilibre
+                ? `<span style="color:#34d399;">⚖️ Rendement synchro</span>`
+                : `<span style="color:#fbbf24;">⚠️ Débits déséquilibrés</span>`;
+
+            div.innerHTML = `
+                ${badgeTop}
+                <h4 style="margin:4px 0; color:${p.id === etat.parcelleActive ? '#fbbf24' : '#f5f5f4'};">${p.nom}</h4>
+                <div style="font-size:0.88em;">${infoTeneur}</div>
+                <div style="margin-top:6px; padding:5px; background:rgba(0,0,0,0.35); border-radius:4px; font-size:0.82em;">
+                    <div><strong>${detailMat}</strong> (${st.affectes.length} engin${st.affectes.length > 1 ? 's' : ''})</div>
+                    <div style="color:#fbbf24; font-weight:700; margin-top:2px;">⚙️ Terre traitée : ${st.totalTerreTh} t/h</div>
+                    <div>${badgeEquilibre}</div>
+                </div>
+                <button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>
+            `;
         } else {
             div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;
         }
+
         div.onclick = () => actionMine('parcelle', p.id);
         grid.appendChild(div);
     });
 }
+
 
 
 function majSliderMarge() {
@@ -446,12 +515,10 @@ setInterval(() => {
 }, 1000);
 
 let secteurInspecteIdx = 0;
-
 function ouvrirChantierSecteur(idx) {
     secteurInspecteIdx = idx;
     rendreChantierSecteur(idx);
 }
-
 function rendreChantierSecteur(idx) {
     const panel = document.getElementById('sector-chantier-panel');
     if (!panel || !Array.isArray(parcelles)) return;
@@ -462,64 +529,58 @@ function rendreChantierSecteur(idx) {
         return;
     }
 
-    panel.style.display = 'block';
-    document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} (Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(p.reserveReelle).toLocaleString()} t)`;
-
+    const st = calculerStatsSecteur(idx);
     const fleetAll = [
         ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []).map(f => ({ ...f, targetType: 'FLEET' })),
         ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : []).map(r => ({ ...r, targetType: 'RENTAL' }))
     ];
-
-    const affectes = fleetAll.filter(e => parseInt(e.parcelle_index) === idx);
     const autres = fleetAll.filter(e => parseInt(e.parcelle_index) !== idx);
 
-    // Calcul des 4 débits horaires (t/h)
-    const debits = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
-    for (const e of affectes) {
-        const v = parseFloat(e.vitesse_reglee_th) || 45;
-        const cat = (e.categorie || '').toLowerCase();
-        if (cat.includes('transport')) debits.Transport += v;
-        else if (cat.includes('traitement')) debits.Traitement += v;
-        else if (cat.includes('lavage')) debits.Lavage += v;
-        else debits.Excavation += v;
-    }
+    panel.style.display = 'block';
+    document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} | Total terre traitée : ${st.totalTerreTh} t/h | Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(p.reserveReelle).toLocaleString()} t`;
 
-    const debitReel = Math.min(debits.Excavation, debits.Transport, debits.Traitement, debits.Lavage);
     const maillons = [
-        { nom: '⛏️ Excavation', val: debits.Excavation },
-        { nom: '🚛 Transport', val: debits.Transport },
-        { nom: '⚙️ Traitement', val: debits.Traitement },
-        { nom: '💧 Lavage', val: debits.Lavage }
+        { nom: '1. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
+        { nom: '2. 🚛 Transport', val: st.debits.Transport, nb: st.counts.Transport },
+        { nom: '3. 🚜 Chargement', val: st.debits.Chargement, nb: st.counts.Chargement },
+        { nom: '4. 📥 Convoyage', val: st.debits.Convoyage, nb: st.counts.Convoyage },
+        { nom: '5. ⚙️ Traitement', val: st.debits.Traitement, nb: st.counts.Traitement },
+        { nom: '6. 💧 Lavage', val: st.debits.Lavage, nb: st.counts.Lavage }
     ];
 
     document.getElementById('sector-debits-grid').innerHTML = maillons.map(m => {
-        const isMin = m.val === debitReel;
+        const isMin = m.val === st.debitChaine;
+        const surplus = st.debitChaine > 0 && m.val > st.debitChaine ? ` (+${+(m.val - st.debitChaine).toFixed(1)} t/h perdus)` : '';
         return `
-            <div class="ui inverted segment" style="border-bottom: 3px solid ${m.val === 0 ? '#ef4444' : isMin ? '#fbbf24' : '#34d399'};">
-                <div style="font-size:0.88em; color:#a8a29e;">${m.nom}</div>
+            <div class="ui inverted segment" style="border-bottom: 3px solid ${m.val === 0 ? '#ef4444' : isMin && st.estEquilibre ? '#34d399' : isMin ? '#fbbf24' : '#f97316'};">
+                <div style="font-size:0.88em; color:#a8a29e;">${m.nom} (${m.nb} engin${m.nb > 1 ? 's' : ''})</div>
                 <div style="font-size:1.3em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'};">${m.val} t/h</div>
-                <div style="font-size:0.8em; color:#d6d3d1;">${isMin ? '⚠️ Maillon limitant' : '✅ Capacité suffisante'}</div>
+                <div style="font-size:0.8em; color:#d6d3d1;">
+                    ${m.val === 0 ? '🚨 Manquant' : st.estEquilibre ? '⚖️ Rendement synchronisé' : isMin ? '⚠️ Maillon limitant' : `⚠️ Surrégime${surplus}`}
+                </div>
             </div>
         `;
     }).join('');
 
     const alertEl = document.getElementById('sector-bottleneck-alert');
-    if (debitReel <= 0) {
-        alertEl.innerHTML = `<span class="ui red label">🚨 Chaîne incomplète (0 t/h) : affectez au moins 1 engin dans chaque famille (Excavation, Transport, Traitement, Lavage) sur ce secteur !</span>`;
+    if (st.debitChaine <= 0) {
+        alertEl.innerHTML = `<span class="ui red label">🚨 Chaîne incomplète (0 t/h mécanisé) : il faut les 6 étapes dans l'ordre (⛏️ Excavation → 🚛 Transport → 🚜 Chargement → 📥 Convoyage → ⚙️ Traitement → 💧 Lavage) !</span>`;
+    } else if (!st.estEquilibre) {
+        const orHeure = +(st.totalTerreTh * p.pureteReelle).toFixed(2);
+        alertEl.innerHTML = `<span class="ui orange label">⚠️ Rendements déséquilibrés : la chaîne est bridée à ${st.debitChaine} t/h (Total avec mineurs : ${st.totalTerreTh} t/h ≈ ${orHeure} g/h). Alignez les 6 étapes sur ${st.debitChaine} t/h pour économiser carburant et usure !</span>`;
     } else {
-        const orHeure = +(debitReel * p.pureteReelle).toFixed(1);
-        alertEl.innerHTML = `<span class="ui green label">✅ Débit effectif de la chaîne : ${debitReel} t/h (~${orHeure} g d'or brut / heure)</span>`;
+        const orHeure = +(st.totalTerreTh * p.pureteReelle).toFixed(2);
+        alertEl.innerHTML = `<span class="ui green label">⚖️ Chaîne parfaitement synchronisée à ${st.debitChaine} t/h (Total terre traitée : ${st.totalTerreTh} t/h ≈ ${orHeure} g d'or brut / heure)</span>`;
     }
 
-    // Tableau des engins affectés avec variateur de vitesse (t/h)
     const tbody = document.getElementById('sector-assigned-tbody');
-    if (affectes.length === 0) {
+    if (st.affectes.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur.</td></tr>';
     } else {
         const optionsSecteurs = parcelles.map((sec, sIdx) => sec.estSondee ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
-        tbody.innerHTML = affectes.map(e => {
-            const vMin = parseFloat(e.vitesse_min_th) || 30;
-            const vMax = parseFloat(e.vitesse_max_th) || 60;
+        tbody.innerHTML = st.affectes.map(e => {
+            const vMin = parseFloat(e.vitesse_min_th) || 2;
+            const vMax = parseFloat(e.vitesse_max_th) || 5;
             const vReg = parseFloat(e.vitesse_reglee_th) || vMin;
             const pct = Math.round((vReg / vMax) * 100);
             return `
@@ -544,7 +605,6 @@ function rendreChantierSecteur(idx) {
         }).join('');
     }
 
-    // Boutons pour affecter rapidement un engin depuis un autre secteur
     const availEl = document.getElementById('sector-available-fleet');
     if (autres.length === 0) {
         availEl.innerHTML = '<span style="color:#a8a29e; font-size:0.9em;">Tous vos engins actifs sont déjà sur ce secteur.</span>';

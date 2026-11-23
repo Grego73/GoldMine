@@ -1,4 +1,26 @@
 let eqData = null;
+let eqFiltreCategorie = 'TOUS';
+let eqFiltreGabarit = 'TOUS';
+
+function filtrerCatalogueBoutique(cat, gab) {
+    if (cat !== null) eqFiltreCategorie = cat;
+    if (gab !== null) eqFiltreGabarit = gab;
+    rendreBoutiqueNeuf();
+}
+
+function trierCatalogueLogique(liste) {
+    const ordreCat = { Excavation: 1, Transport: 2, Chargement: 3, Convoyage: 4, Traitement: 5, Lavage: 6 };
+    const ordreGab = { Petit: 1, Moyen: 2, Géant: 3 };
+    return [...liste].sort((a, b) => {
+        const cA = ordreCat[a.categorie] || 99;
+        const cB = ordreCat[b.categorie] || 99;
+        if (cA !== cB) return cA - cB;
+        const gA = ordreGab[a.gabarit || 'Moyen'] || 99;
+        const gB = ordreGab[b.gabarit || 'Moyen'] || 99;
+        if (gA !== gB) return gA - gB;
+        return parseFloat(a.prix_neuf) - parseFloat(b.prix_neuf);
+    });
+}
 
 async function chargerModuleMateriel() {
     try {
@@ -62,7 +84,7 @@ function rendreMaFlotte() {
             return `
                 <tr>
                     <td><strong>${f.nom}</strong><br><small style="color:#a8a29e;">${f.categorie} — Gabarit : <strong style="color:#fbbf24;">${gab}</strong></small></td>
-                    <td><strong>${f.prod_tonnes} t/j</strong></td>
+                    <td><strong>${f.vitesse_min_th}-${f.vitesse_max_th} t/h</strong></td>
                     <td>${f.carburant_jour} €/j</td>
                     <td><strong style="color:${usure > 60 ? '#f87171' : '#34d399'};">${usure}%</strong> (+${f.usure_jour}%/j)</td>
                     <td>${badgeStatut}</td>
@@ -80,7 +102,7 @@ function rendreMaFlotte() {
             locTbody.innerHTML = eqData.myActiveRentals.map(r => `
                 <tr>
                     <td><strong>${r.nom}</strong> (${r.source_type === 'OFFICIEL' ? 'Parc Officiel' : 'PDG ' + r.owner_name})</td>
-                    <td><strong>${r.prod_tonnes} t/j</strong></td>
+                    <td><strong>${r.vitesse_min_th}-${r.vitesse_max_th} t/h</strong></td>
                     <td>${r.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(r.loyer_jour).toLocaleString()} €/j</td>
                     <td><span class="ui blue label">${r.jours_restants} jour(s) restant(s)</span></td>
@@ -90,17 +112,63 @@ function rendreMaFlotte() {
     }
 }
 
-// 2. BOUTIQUE NEUF (0% USURE)
+// 2. BOUTIQUE NEUF (0% USURE + FILTRES PAR TYPE & GABARIT)
 function rendreBoutiqueNeuf() {
     const grid = document.getElementById('eq-shop-new-grid');
     if (!grid || !eqData) return;
 
-    if (eqData.catalog.length === 0) {
-        grid.innerHTML = '<p style="color:#a8a29e;">Catalogue vide (à configurer dans le Panel Admin).</p>';
+    let toolbar = document.getElementById('eq-shop-filters');
+    if (!toolbar) {
+        toolbar = document.createElement('div');
+        toolbar.id = 'eq-shop-filters';
+        toolbar.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:14px; padding:10px; background:#1c1917; border-radius:6px; border:1px solid #44403c;';
+        grid.parentNode.insertBefore(toolbar, grid);
+    }
+
+    const categories = [
+        { id: 'TOUS', label: '🌐 Tous' },
+        { id: 'Excavation', label: '⛏️ Excavation' },
+        { id: 'Transport', label: '🚛 Transport' },
+        { id: 'Chargement', label: '🚜 Chargement' },
+        { id: 'Convoyage', label: '📥 Trémie & Convoyeur' },
+        { id: 'Traitement', label: '⚙️ Traitement' },
+        { id: 'Lavage', label: '💧 Lavage' }
+    ];
+    const gabarits = [
+        { id: 'TOUS', label: 'Tous gabarits' },
+        { id: 'Petit', label: 'Petit' },
+        { id: 'Moyen', label: 'Moyen' },
+        { id: 'Géant', label: 'Géant' }
+    ];
+
+    toolbar.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${categories.map(c => `
+                <button class="ui mini ${eqFiltreCategorie === c.id ? 'yellow' : ''} button" onclick="filtrerCatalogueBoutique('${c.id}', null)">${c.label}</button>
+            `).join('')}
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+            <span style="font-size:0.85em; color:#a8a29e;">Gabarit :</span>
+            ${gabarits.map(g => `
+                <button class="ui mini ${eqFiltreGabarit === g.id ? 'blue' : ''} button" onclick="filtrerCatalogueBoutique(null, '${g.id}')">${g.label}</button>
+            `).join('')}
+        </div>
+    `;
+
+    let liste = trierCatalogueLogique(eqData.catalog);
+    if (eqFiltreCategorie !== 'TOUS') {
+        liste = liste.filter(item => item.categorie === eqFiltreCategorie);
+    }
+    if (eqFiltreGabarit !== 'TOUS') {
+        liste = liste.filter(item => (item.gabarit || 'Moyen') === eqFiltreGabarit);
+    }
+
+    if (liste.length === 0) {
+        grid.innerHTML = '<p style="color:#a8a29e;">Aucun engin ne correspond à ce filtre.</p>';
         return;
     }
 
-    grid.innerHTML = eqData.catalog.map(item => `
+    grid.innerHTML = liste.map(item => `
         <div class="ui inverted segment" style="display:flex; flex-direction:column; justify-content:space-between;">
             <div>
                 <div style="display:flex; justify-content:space-between; margin-bottom:8px;">
@@ -108,7 +176,7 @@ function rendreBoutiqueNeuf() {
                     <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
                 </div>
                 <h4 style="color:#fbbf24; margin-bottom:8px;">${item.nom}</h4>
-                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Extraction : <strong>${item.prod_tonnes} t/jour</strong> (${item.vitesse_min_th}-${item.vitesse_max_th} t/h)</p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Débit : <strong>${item.vitesse_min_th}-${item.vitesse_max_th} t/h</strong></p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛽ Carburant : <strong>${item.carburant_jour} €/jour</strong></p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⚙️ Usure : <strong>${item.usure_jour}% /jour</strong> (Garanti 0% neuf)</p>
                 <p style="font-size:0.88em; color:#a8a29e; margin-bottom:12px;">🔧 Pièces en cas de panne : <strong>${item.pieces_panne || 1} pièce(s)</strong></p>
@@ -120,13 +188,12 @@ function rendreBoutiqueNeuf() {
         </div>
     `).join('');
 }
-
-// 3. CONCESSIONNAIRES SPÉCIALISÉS & PIÈCES DÉTACHÉES
+// 3. CONCESSIONNAIRES SPÉCIALISÉS & PIÈCES DÉTACHÉES (6 FAMILLES)
 function rendreConcessionnaires() {
     const grid = document.getElementById('eq-dealers-grid');
     if (!grid || !eqData || !eqData.tarifsPieces) return;
 
-    const familles = ['Excavation', 'Transport', 'Traitement', 'Lavage'];
+    const familles = ['Excavation', 'Transport', 'Chargement', 'Convoyage', 'Traitement', 'Lavage'];
     const gabarits = ['Petit', 'Moyen', 'Géant'];
     const stock = eqData.piecesStock || {};
 
@@ -184,7 +251,7 @@ function rendreBrocanteEncheres() {
         return `
             <tr>
                 <td><strong>${a.nom}</strong><br><small style="color:#a8a29e;">Vendeur : ${a.seller_name} | Usure : ${Math.round(a.usure_actuelle)}%</small></td>
-                <td>${a.prod_tonnes} t/j<br><small>${a.carburant_jour} €/j</small></td>
+                <td>${a.vitesse_min_th || 2}-${a.vitesse_max_th || 5} t/h<br><small>${a.carburant_jour} €/j</small></td>
                 <td>${isBrocante ? '<span class="ui green label">Vente Directe</span>' : '<span class="ui orange label">Enchère</span>'}</td>
                 <td class="money-text">${Math.round(a.prix_actuel).toLocaleString()} €<br><small style="color:#a8a29e;">${a.bidder_name ? 'Meneur : ' + a.bidder_name : 'Aucune offre'}</small></td>
                 <td><strong>${heuresRest}h ${minsRest}m</strong></td>
@@ -194,12 +261,13 @@ function rendreBrocanteEncheres() {
     }).join('');
 }
 
-// 5. LOCATION D'ENGINS (PARC OFFICIEL CORRIGÉ + OFFRES PDG)
+// 5. LOCATION D'ENGINS (TRIÉE + BADGES ALIGNÉS À DROITE + OFFRES PDG)
 function rendreLocationEngins() {
     const offTbody = document.getElementById('eq-official-rentals-tbody');
     if (offTbody && eqData) {
         const coeff = parseFloat(eqData.coeffLoyerJeu) || 0.08;
-        offTbody.innerHTML = eqData.catalog.map(item => {
+        const listeTriee = trierCatalogueLogique(eqData.catalog);
+        offTbody.innerHTML = listeTriee.map(item => {
             const loyerEstime = Math.round(parseFloat(item.prix_neuf) * coeff);
             return `
                 <tr>
@@ -212,7 +280,7 @@ function rendreLocationEngins() {
                             </div>
                         </div>
                     </td>
-                    <td><strong>${item.prod_tonnes} t/j</strong></td>
+                    <td><strong>${item.vitesse_min_th}-${item.vitesse_max_th} t/h</strong></td>
                     <td>${item.carburant_jour} €/j</td>
                     <td class="money-text">${loyerEstime.toLocaleString()} €/j</td>
                     <td>
@@ -235,7 +303,7 @@ function rendreLocationEngins() {
             pdgTbody.innerHTML = eqData.rentalOffers.map(o => `
                 <tr>
                     <td><strong>${o.nom}</strong><br><small>Propriétaire : ${o.owner_name}</small></td>
-                    <td><strong>${o.prod_tonnes} t/j</strong></td>
+                    <td><strong>${o.vitesse_min_th || 2}-${o.vitesse_max_th || 5} t/h</strong></td>
                     <td>${o.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(o.loyer_jour).toLocaleString()} €/j</td>
                     <td><span class="ui yellow label">${o.jours_restants} jour(s)</span></td>
@@ -387,3 +455,4 @@ async function louerPdg(rentalId) {
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
+

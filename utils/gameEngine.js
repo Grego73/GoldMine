@@ -13,7 +13,6 @@ function tirerClientPondere(catalogue) {
 }
 
 async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
-    // 1. Ventes d'or réalisées sur les 4 dernières heures (logs FINANCE commençant par '💰 Vente de Xg')
     const ventesRes = await clientDb.query(`
         SELECT details FROM player_logs
         WHERE category = 'FINANCE'
@@ -26,7 +25,6 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
         if (match) orVendu4h += parseFloat(match.at(1)) || 0;
     }
 
-    // 2. Production d'or extraite sur les 4 dernières heures (logs MINE 'Extraction horaire')
     const prodRes = await clientDb.query(`
         SELECT details FROM player_logs
         WHERE category = 'MINE'
@@ -39,7 +37,6 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
         if (match) orProduit4h += parseFloat(match.at(1)) || 0;
     }
 
-    // 3. Volume d'achats matériels & investissements sur les 4 dernières heures
     const achatsRes = await clientDb.query(`
         SELECT COUNT(*) AS nb FROM player_logs
         WHERE category IN ('MATERIEL', 'PROSPECTION')
@@ -47,21 +44,17 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
     `);
     const nbAchats4h = parseInt(achatsRes.rows.at(0).nb) || 0;
 
-    // 4. Stock d'or moyen détenu par les compagnies actives
     const stocksRes = await clientDb.query(`
-        SELECT COALESCE(AVG(stock_or), 0) AS moy_stock, COUNT(*) AS nb_mines
+        SELECT COALESCE(AVG(stock_or), 0) AS moy_stock
         FROM mines m JOIN users u ON u.id = m.user_id
         WHERE u.is_banned = FALSE
     `);
     const moyStock = parseFloat(stocksRes.rows.at(0).moy_stock) || 0;
 
-    // Calcul du solde Offre / Demande :
-    // - Ventes massives -> pression baissière
-    // - Production stockée + achats matériels actifs -> tension haussière
     const ratioVenteSurProd = orProduit4h > 0 ? (orVendu4h / orProduit4h) : (orVendu4h > 0 ? 1.5 : 0.5);
-    const effetVentes = (0.65 - Math.min(2.0, ratioVenteSurProd)) * 0.035; // -4.7% à +2.3%
-    const effetInvestissement = Math.min(0.025, nbAchats4h * 0.004);      // jusqu'à +2.5% si achats soutenus
-    const aleaMarche = (Math.random() * 0.024) - 0.012;                    // bruit naturel ±1.2%
+    const effetVentes = (0.65 - Math.min(2.0, ratioVenteSurProd)) * 0.035;
+    const effetInvestissement = Math.min(0.025, nbAchats4h * 0.004);
+    const aleaMarche = (Math.random() * 0.024) - 0.012;
 
     const variationTotale = Math.max(-0.06, Math.min(0.06, effetVentes + effetInvestissement + aleaMarche));
     const nouveauCours = Math.max(
@@ -69,17 +62,9 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
         Math.min(cfg.coursOrMax || 110, +(coursActuel * (1 + variationTotale)).toFixed(2))
     );
 
-    // Multiplicateur de demande client (s'adapte si la production/stock moyen augmente)
     const multDemande = Math.max(1.0, Math.min(4.0, 1 + (moyStock / 2500)));
 
-    return {
-        nouveauCours,
-        variationPct: +(variationTotale * 100).toFixed(2),
-        orVendu4h: Math.round(orVendu4h),
-        orProduit4h: Math.round(orProduit4h),
-        nbAchats4h,
-        multDemande
-    };
+    return { nouveauCours, multDemande };
 }
 
 async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
@@ -237,11 +222,11 @@ async function synchroniserHorlogeServeur() {
                 const tousEngins = [
                     ...fleetRes.rows.map(f => ({ ...f, _kind: 'FLEET' })),
                     ...rentalsRes.rows.map(r => ({ ...r, _kind: 'RENTAL' }))
-                ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 4) - (parseFloat(a.vitesse_reglee_th) || 4));
+                ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 3) - (parseFloat(a.vitesse_reglee_th) || 3));
 
                 const debitsSecteur = {};
                 let conducteursDispo = conducteurs;
-                const reqParEngin = parseInt(cfg.conducteursRequisParEngin) || 2;
+                const reqParEnginDefaut = parseInt(cfg.conducteursRequisParEngin) || 2;
 
                 let coutCarburantHoraire = 0;
                 let coutLoyersHoraire = 0;
@@ -249,9 +234,11 @@ async function synchroniserHorlogeServeur() {
                 let sommeUsure = 0;
 
                 for (const item of tousEngins) {
-                    const affectes = Math.min(reqParEngin, conducteursDispo);
+                    const catLower = (item.categorie || '').toLowerCase();
+                    const reqPourCetEngin = catLower.includes('convoy') ? 1 : reqParEnginDefaut;
+                    const affectes = Math.min(reqPourCetEngin, conducteursDispo);
                     conducteursDispo -= affectes;
-                    const ratioHoraire = affectes / reqParEngin;
+                    const ratioHoraire = affectes / reqPourCetEngin;
 
                     const vReglee = parseFloat(item.vitesse_reglee_th) || 3;
                     const vMax = parseFloat(item.vitesse_max_th) || 5;
@@ -274,12 +261,13 @@ async function synchroniserHorlogeServeur() {
                             sommeUsure += 100;
                         } else {
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
-                            const cat = (item.categorie || '').toLowerCase();
-                            if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
-                            else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
-                            else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
+                            if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
+                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyage += debitEffectif;
+                            else if (catLower.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
+                            else if (catLower.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
                             else debitsSecteur[sIdx].Excavation += debitEffectif;
 
                             sommeUsure += usureEngin;
@@ -292,12 +280,13 @@ async function synchroniserHorlogeServeur() {
                         if (ratioHoraire > 0) {
                             coutCarburantHoraire += ((parseFloat(item.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
-                            const cat = (item.categorie || '').toLowerCase();
-                            if (cat.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
-                            else if (cat.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
-                            else if (cat.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
+                            if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
+                            else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
+                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyage += debitEffectif;
+                            else if (catLower.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
+                            else if (catLower.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
                             else debitsSecteur[sIdx].Excavation += debitEffectif;
                         }
 
@@ -323,6 +312,7 @@ async function synchroniserHorlogeServeur() {
                     }
                 }
 
+                // 3. Chaîne en 6 étapes dans l'ordre minier : Excavation -> Transport -> Chargement -> Convoyage -> Traitement -> Lavage
                 let orProduitTotal = 0;
                 let rocheExtraiteTotale = 0;
 
@@ -334,8 +324,10 @@ async function synchroniserHorlogeServeur() {
                     const p = parcelles.at(idx);
                     if (!p || !p.estSondee || p.reserveReelle <= 0) continue;
 
-                    const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Traitement: 0, Lavage: 0 };
-                    const debitChaine = Math.min(d.Excavation, d.Transport, d.Traitement, d.Lavage);
+                    const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+                    const debitAmont = Math.min(d.Excavation, d.Transport, d.Chargement, d.Convoyage);
+                    const debitTraitement = Math.min(debitAmont, d.Traitement);
+                    const debitChaine = Math.min(debitTraitement, d.Lavage);
 
                     let prodManuelle = 0;
                     if (idx === parseInt(mine.parcelle_active) && !greve) {
