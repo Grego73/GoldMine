@@ -226,6 +226,47 @@ router.post('/clients-catalog', requireAdmin, async (req, res) => {
     res.json({ success: true });
 });
 
+router.post('/clients-catalog-bulk', requireAdmin, async (req, res) => {
+    const { items } = req.body;
+    if (!Array.isArray(items) || items.length === 0) {
+        return res.status(400).json({ error: 'Aucune donnée client valide à importer.' });
+    }
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        let count = 0;
+        for (const it of items) {
+            if (!it.nom || !it.secteur || isNaN(parseFloat(it.min_gr)) || isNaN(parseFloat(it.max_gr))) continue;
+            await client.query(
+                `INSERT INTO clients_catalog (nom, type_client, secteur, min_gr, max_gr, bonus_min, bonus_max, poids_apparition, actif)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
+                 ON CONFLICT (nom) DO UPDATE SET
+                 type_client = $2, secteur = $3, min_gr = $4, max_gr = $5, bonus_min = $6, bonus_max = $7, poids_apparition = $8, actif = TRUE`,
+                [
+                    it.nom.trim(),
+                    (it.type_client || 'Entreprise').trim(),
+                    it.secteur.trim(),
+                    parseFloat(it.min_gr),
+                    parseFloat(it.max_gr),
+                    parseFloat(it.bonus_min) || 0,
+                    parseFloat(it.bonus_max) || 0.05,
+                    parseInt(it.poids_apparition) || 10
+                ]
+            );
+            count += 1;
+        }
+        await client.query('COMMIT');
+        await logAdmin(req.adminUsername, `Import massif de ${count} clients acheteurs`);
+        res.json({ success: true, count });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Erreur clients-catalog-bulk :', err);
+        res.status(500).json({ error: 'Erreur lors de l’import des clients' });
+    } finally {
+        client.release();
+    }
+});
+
 router.delete('/clients-catalog/:id', requireAdmin, async (req, res) => {
     await pool.query('DELETE FROM clients_catalog WHERE id = $1', [req.params.id]);
     await logAdmin(req.adminUsername, `Suppression client catalogue #${req.params.id}`);

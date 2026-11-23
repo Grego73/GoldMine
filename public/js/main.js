@@ -320,11 +320,8 @@ function rendreDetailFrais() {
 }
 
 function allerVersMissionTutoriel(ongletCible) {
-    const navItems = document.querySelectorAll('.mine-nav .item');
-    let menuEl = navItems.at(0);
-    if (ongletCible === 'materiel') menuEl = document.getElementById('nav-materiel');
-    if (ongletCible === 'prospection') menuEl = navItems.at(2);
-    if (ongletCible === 'marche') menuEl = navItems.at(3);
+    const navItems = Array.from(document.querySelectorAll('.mine-nav .item'));
+    const menuEl = navItems.find(el => (el.getAttribute('onclick') || '').includes(`'${ongletCible}'`)) || navItems.at(0);
 
     changerOnglet(ongletCible, menuEl);
     if (ongletCible === 'materiel' && typeof chargerModuleMateriel === 'function') {

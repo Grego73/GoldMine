@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin — Catalogue Clients Acheteurs</title>
+    <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+    <div class="ui top attached inverted menu" style="background:#1c1917; border-bottom:1px solid #44403c; padding:6px 14px;">
+        <div class="header item" style="color:#fbbf24; font-weight:800;">🛡️ ADMIN GOLD MINE</div>
+        <a class="item" href="/admin/users.html">👥 PDG &amp; Comptes</a>
+        <a class="item" href="/admin/settings.html">⚙️ Variables</a>
+        <a class="item" href="/admin/catalog.html">🚜 Engins</a>
+        <a class="active item" href="/admin/clients.html">🤝 Clients</a>
+        <a class="item" href="/admin/texts.html">📝 Textes</a>
+        <a class="item" href="/admin/logs.html">📜 Logs</a>
+        <div class="right menu">
+            <a class="item" href="/game.html" style="color:#34d399;">⛏️ Retour Mine</a>
+        </div>
+    </div>
+
+    <div class="ui container" style="margin-top:20px; margin-bottom:40px;">
+        <div id="admin-toast" class="ui message" style="display:none;"></div>
+
+        <div class="ui inverted segment">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                <h3 style="color:#fbbf24; margin:0;">🤝 Catalogue des Clients Acheteurs</h3>
+                <button class="ui mini blue button" onclick="exporterClients()">📤 Exporter la liste</button>
+            </div>
+
+            <div style="background:#1c1917; border:1px solid #44403c; border-radius:6px; padding:12px; margin-bottom:16px;">
+                <label style="color:#34d399; font-weight:700; display:block; margin-bottom:6px;">
+                    📥 Import rapide en masse (1 client par ligne : nom ; type ; secteur ; min_gr ; max_gr ; bonus_min ; bonus_max ; poids)
+                </label>
+                <textarea id="bulk-clients-text" rows="6" style="width:100%; background:#0c0a09; color:#f5f5f4; border:1px solid #44403c; border-radius:4px; padding:8px; font-family:monospace;" placeholder="Joaillerie Place Vendôme ; Entreprise ; Luxe & Horlogerie ; 50 ; 250 ; 0.04 ; 0.12 ; 20"></textarea>
+                <div style="text-align:right; margin-top:8px;">
+                    <button class="ui green button" onclick="importerClientsMasse()">📥 Importer tous les clients d'un coup</button>
+                </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:2fr 1.2fr 1.5fr 1fr 1fr 1fr 1fr 0.8fr auto; gap:8px; margin-bottom:16px; align-items:center;">
+                <input type="text" id="c-nom" placeholder="Nom du client">
+                <select id="c-type">
+                    <option value="Particulier">Particulier</option>
+                    <option value="Entreprise" selected>Entreprise</option>
+                    <option value="Événementiel">Événementiel</option>
+                </select>
+                <input type="text" id="c-secteur" placeholder="Secteur">
+                <input type="number" id="c-min" placeholder="Min (g)" value="50">
+                <input type="number" id="c-max" placeholder="Max (g)" value="300">
+                <input type="number" id="c-bmin" step="0.01" placeholder="Bonus min" value="0.01">
+                <input type="number" id="c-bmax" step="0.01" placeholder="Bonus max" value="0.08">
+                <input type="number" id="c-poids" placeholder="Poids" value="15">
+                <button class="ui yellow button" onclick="ajouterClient()">+ Ajouter</button>
+            </div>
+
+            <table class="ui inverted celled table">
+                <thead>
+                    <tr>
+                        <th>Client</th>
+                        <th>Type</th>
+                        <th>Secteur</th>
+                        <th>Demande (g)</th>
+                        <th>Bonus Prix</th>
+                        <th>Poids</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="clients-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let listeClients = [];
+
+        function toast(msg, isErr = false) {
+            const el = document.getElementById('admin-toast');
+            el.className = isErr ? 'ui red message' : 'ui green message';
+            el.innerText = msg;
+            el.style.display = 'block';
+            setTimeout(() => { el.style.display = 'none'; }, 4000);
+        }
+
+        async function chargerClients() {
+            const res = await fetch('/api/admin/clients-catalog');
+            if (!res.ok) return;
+            listeClients = await res.json();
+            const tbody = document.getElementById('clients-tbody');
+            if (listeClients.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#a8a29e;">Aucun client configuré. Utilisez l’import rapide ci-dessus !</td></tr>';
+                return;
+            }
+            tbody.innerHTML = listeClients.map(c => `
+                <tr>
+                    <td><strong>${c.nom}</strong></td>
+                    <td><span class="ui blue label">${c.type_client}</span></td>
+                    <td>${c.secteur}</td>
+                    <td>${c.min_gr} à ${c.max_gr} g</td>
+                    <td>+${Math.round(c.bonus_min * 100)}% à +${Math.round(c.bonus_max * 100)}%</td>
+                    <td>${c.poids_apparition}</td>
+                    <td><button class="ui mini red button" onclick="supprimerClient(${c.id})">Supprimer</button></td>
+                </tr>
+            `).join('');
+        }
+
+        async function ajouterClient() {
+            const body = {
+                nom: document.getElementById('c-nom').value,
+                type_client: document.getElementById('c-type').value,
+                secteur: document.getElementById('c-secteur').value,
+                min_gr: parseFloat(document.getElementById('c-min').value),
+                max_gr: parseFloat(document.getElementById('c-max').value),
+                bonus_min: parseFloat(document.getElementById('c-bmin').value),
+                bonus_max: parseFloat(document.getElementById('c-bmax').value),
+                poids_apparition: parseInt(document.getElementById('c-poids').value) || 10
+            };
+            const res = await fetch('/api/admin/clients-catalog', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast('Client ajouté avec succès !');
+                document.getElementById('c-nom').value = '';
+                chargerClients();
+            } else {
+                toast(data.error || 'Erreur ajout', true);
+            }
+        }
+
+        async function importerClientsMasse() {
+            const raw = document.getElementById('bulk-clients-text').value.trim();
+            if (!raw) return toast('Collez au moins une ligne de client.', true);
+
+            const lignes = raw.split('\n').map(l => l.trim()).filter(Boolean);
+            const items = [];
+            for (const ligne of lignes) {
+                const cols = ligne.split(';').map(s => s.trim());
+                if (cols.length < 8) {
+                    return toast('Format invalide (8 colonnes séparées par ; requises).', true);
+                }
+                items.push({
+                    nom: cols.at(0),
+                    type_client: cols.at(1),
+                    secteur: cols.at(2),
+                    min_gr: parseFloat(cols.at(3)),
+                    max_gr: parseFloat(cols.at(4)),
+                    bonus_min: parseFloat(cols.at(5)),
+                    bonus_max: parseFloat(cols.at(6)),
+                    poids_apparition: parseInt(cols.at(7)) || 10
+                });
+            }
+
+            const res = await fetch('/api/admin/clients-catalog-bulk', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items })
+            });
+            const data = await res.json();
+            if (data.success) {
+                toast(`✅ ${data.count} client(s) importé(s) avec succès !`);
+                document.getElementById('bulk-clients-text').value = '';
+                chargerClients();
+            } else {
+                toast(data.error || 'Erreur lors de l’import', true);
+            }
+        }
+
+        async function supprimerClient(id) {
+            const res = await fetch('/api/admin/clients-catalog/' + id, { method: 'DELETE' });
+            const data = await res.json();
+            if (data.success) {
+                toast('Client supprimé.');
+                chargerClients();
+            }
+        }
+
+        function exporterClients() {
+            const txt = listeClients.map(c =>
+                `${c.nom} ; ${c.type_client} ; ${c.secteur} ; ${c.min_gr} ; ${c.max_gr} ; ${c.bonus_min} ; ${c.bonus_max} ; ${c.poids_apparition}`
+            ).join('\n');
+            document.getElementById('bulk-clients-text').value = txt;
+            toast('Liste copiée dans la zone ci-dessus.');
+        }
+
+        chargerClients();
+    </script>
+</body>
+</html>
