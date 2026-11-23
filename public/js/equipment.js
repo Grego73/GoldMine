@@ -203,7 +203,15 @@ function rendreLocationEngins() {
             const loyerEstime = Math.round(parseFloat(item.prix_neuf) * coeff);
             return `
                 <tr>
-                    <td><strong>${item.nom}</strong> <span class="ui blue label">${item.categorie}</span> <span class="ui yellow label">${item.gabarit || 'Moyen'}</span></td>
+                    <td>
+                        <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+                            <strong>${item.nom}</strong>
+                            <div style="display:flex; gap:6px; flex-shrink:0;">
+                                <span class="ui blue label" style="min-width:92px; text-align:center;">${item.categorie}</span>
+                                <span class="ui yellow label" style="min-width:66px; text-align:center;">${item.gabarit || 'Moyen'}</span>
+                            </div>
+                        </div>
+                    </td>
                     <td><strong>${item.prod_tonnes} t/j</strong></td>
                     <td>${item.carburant_jour} €/j</td>
                     <td class="money-text">${loyerEstime.toLocaleString()} €/j</td>
