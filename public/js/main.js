@@ -60,9 +60,26 @@ function afficherToast(msg, isError = false) {
     const box = document.getElementById('game-toast');
     if (!box) return;
     box.className = isError ? 'ui red message' : 'ui green message';
+    box.style.position = 'fixed';
+    box.style.top = '16px';
+    box.style.left = '50%';
+    box.style.transform = 'translateX(-50%)';
+    box.style.bottom = 'auto';
+    box.style.right = 'auto';
+    box.style.margin = '0';
+    box.style.zIndex = '10000';
+    box.style.maxWidth = '540px';
+    box.style.width = 'max-content';
+    box.style.textAlign = 'center';
+    box.style.pointerEvents = 'none';
+    box.style.borderRadius = '24px';
+    box.style.padding = '10px 22px';
+    box.style.fontWeight = '700';
+    box.style.boxShadow = '0 8px 24px rgba(0,0,0,0.75)';
     box.innerText = msg;
     box.style.display = 'block';
-    setTimeout(() => { box.style.display = 'none'; }, 4000);
+    clearTimeout(window._toastTimer);
+    window._toastTimer = setTimeout(() => { box.style.display = 'none'; }, 4000);
 }
 
 // 2. CHARGEMENT COMPLET DEPUIS LE SERVEUR
@@ -527,7 +544,28 @@ function dessinerCarte() {
             `;
         }
 
-        div.onclick = () => actionMine('parcelle', p.id);
+        div.onclick = () => {
+            if (!p.estSondee) {
+                const fleetAll = [
+                    ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []),
+                    ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : [])
+                ];
+                let capMax = 0;
+                for (const f of fleetAll) {
+                    if ((f.categorie || '').toLowerCase().includes('forag')) {
+                        const g = (f.gabarit || 'Petit').toLowerCase();
+                        if (g.includes('g')) capMax = Math.max(capMax, parseFloat(CONFIG.profondeurMaxForageGeant) || 60);
+                        else if (g === 'moyen') capMax = Math.max(capMax, maxM);
+                        else capMax = Math.max(capMax, maxP);
+                    }
+                }
+                if (capMax < prof) {
+                    afficherToast(`⛔ Impossible de sonder ${p.nom} (${prof} m) : il vous faut une ${badgeForeuse} en service dans l'onglet Matériel !`, true);
+                    return;
+                }
+            }
+            actionMine('parcelle', p.id);
+        };
         grid.appendChild(div);
     });
 }

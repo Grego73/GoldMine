@@ -17,6 +17,11 @@
         <div class="right menu">
             <a class="item" href="/game.html" style="color:#34d399;">⛏️ Retour Mine</a>
         </div>
+        <div id="admin-version-bar" style="background:#1c1917; border-bottom:1px solid #44403c; padding:6px 16px; font-size:0.85em; color:#d6d3d1; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+            <span>🖥️ Serveur en ligne : <strong id="ver-server" style="color:#fbbf24;">Chargement...</strong></span>
+            <span>📦 Dernier push GitHub : <strong id="ver-github" style="color:#34d399;">Chargement...</strong></span>
+            <span id="ver-status"></span>
+        </div>
     </div>
 
     <div class="ui container" style="margin-top:20px; margin-bottom:40px;">
@@ -186,6 +191,21 @@
         }
 
         chargerClients();
+    </script>
+    <script>
+        (async function chargerVersionAdmin() {
+            try {
+                const res = await fetch('/api/admin/version');
+                if (!res.ok) return;
+                const v = await res.json();
+                document.getElementById('ver-server').innerText = `v${v.appVersion} (commit ${v.serverCommit})`;
+                const dateStr = v.githubDate ? new Date(v.githubDate).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+                document.getElementById('ver-github').innerText = `${v.githubCommit} ${dateStr ? '(' + dateStr + ')' : ''} ${v.githubMsg ? '— ' + v.githubMsg : ''}`;
+                document.getElementById('ver-status').innerHTML = v.isUpToDate
+                    ? '<span class="ui green label">✅ À jour</span>'
+                    : '<span class="ui orange label">⏳ Déploiement Render en cours...</span>';
+            } catch (e) {}
+        })();
     </script>
 </body>
 </html>

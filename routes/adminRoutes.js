@@ -300,4 +300,43 @@ router.get('/logs', requireAdmin, async (req, res) => {
     res.json(result.rows);
 });
 
+// 7. VÉRIFICATION DE VERSION (SERVEUR ACTIF VS DERNIER COMMIT GITHUB)
+router.get('/version', requireAdmin, async (req, res) => {
+    try {
+        const pkg = require('../package.json');
+        const serverCommit = (process.env.RENDER_GIT_COMMIT || '').slice(0, 7) || 'Local';
+        const serverBranch = process.env.RENDER_GIT_BRANCH || 'main';
+
+        let githubCommit = 'Inconnu';
+        let githubDate = null;
+        let githubMsg = '';
+
+        try {
+            const ghRes = await fetch('https://github.com', {
+                headers: { 'User-Agent': 'GoldMine-Admin' }
+            });
+            if (ghRes.ok) {
+                const ghData = await ghRes.json();
+                githubCommit = (ghData.sha || '').slice(0, 7);
+                githubDate = ghData.commit?.author?.date || null;
+                githubMsg = ghData.commit?.message || '';
+            }
+        } catch (e) {
+            // Hors-ligne ou limite API GitHub atteinte
+        }
+
+        res.json({
+            appVersion: pkg.version || '1.0.0',
+            serverCommit,
+            serverBranch,
+            githubCommit,
+            githubDate,
+            githubMsg,
+            isUpToDate: serverCommit === 'Local' || githubCommit === 'Inconnu' || serverCommit === githubCommit
+        });
+    } catch (err) {
+        res.status(500).json({ error: 'Erreur lecture version' });
+    }
+});
+
 module.exports = router;
