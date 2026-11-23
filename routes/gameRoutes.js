@@ -138,13 +138,17 @@ router.post('/action', requireAuth, async (req, res) => {
         let message = '';
 
         if (type === 'embaucher') {
+            if (mineurs >= 10) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ error: 'Plafond atteint : maximum 10 orpailleurs manuels (passez aux engins industriels !).' });
+            }
             if (argent < cfg.coutMineur) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ error: 'Trésorerie insuffisante' });
             }
             argent -= cfg.coutMineur;
             mineurs += 1;
-            message = `Recrutement d'un mineur (-${cfg.coutMineur} €).`;
+            message = `Recrutement d'un orpailleur artisanal (${mineurs}/10) (-${cfg.coutMineur} €).`;
         } else if (type === 'reparer') {
             if (argent < cfg.coutRevision) {
                 await client.query('ROLLBACK');

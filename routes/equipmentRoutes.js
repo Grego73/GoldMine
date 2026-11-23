@@ -10,14 +10,15 @@ function requireAuth(req, res, next) {
     next();
 }
 
-const FAMILLES_MATERIEL = ['Excavation', 'Transport', 'Chargement', 'Convoyage', 'Traitement', 'Lavage'];
+const FAMILLES_MATERIEL = ['Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
 
 function calculerPrixPiece(cfg, categorie, gabarit) {
     const cat = (categorie || '').toLowerCase();
     let base = parseFloat(cfg.prixPieceExcavation) || 500;
     if (cat.includes('transport')) base = parseFloat(cfg.prixPieceTransport) || 600;
     else if (cat.includes('charg')) base = parseFloat(cfg.prixPieceChargement) || 550;
-    else if (cat.includes('convoy')) base = parseFloat(cfg.prixPieceConvoyage) || 500;
+    else if (cat.includes('trém') || cat.includes('trem')) base = parseFloat(cfg.prixPieceTremie) || 450;
+    else if (cat.includes('convoy')) base = parseFloat(cfg.prixPieceConvoyeur) || 500;
     else if (cat.includes('traitement')) base = parseFloat(cfg.prixPieceTraitement) || 800;
     else if (cat.includes('lavage')) base = parseFloat(cfg.prixPieceLavage) || 900;
 
@@ -28,6 +29,7 @@ function calculerPrixPiece(cfg, categorie, gabarit) {
 
     return Math.round(base * coeff);
 }
+
 
 
 // =========================================================================

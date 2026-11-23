@@ -18,22 +18,25 @@ function rendreEffectifsTerrain(data) {
     const req = data.requis;
     const t = data.tarifs;
 
+    const nbRoulants = req.nbRoulants !== undefined ? req.nbRoulants : req.nbEngins;
+    const nbFixes = req.nbFixes !== undefined ? req.nbFixes : 0;
+
     const postes = [
         {
             roleType: 'conducteur',
-            titre: '🚜 Conducteurs d’Engins (poste 12h/24)',
+            titre: '🚜 Conducteurs d’Engins Roulants',
             actuel: eff.conducteurs,
             requis: req.conducteurs,
-            regle: `2 conducteurs requis par engin actif (${req.nbEngins} engin(s)). 1 seul conducteur = rendement et usure divisés par 2.`,
+            regle: `2 conducteurs requis par engin roulant (${nbRoulants} engin(s) : Excavatrice, Camion, Chargeuse). Sans conducteur, l'engin reste à l'arrêt.`,
             cout: t.coutConducteur,
             salaire: t.salaireConducteurJour
         },
         {
             roleType: 'mecano',
-            titre: '🔧 Mécaniciens de Maintenance',
+            titre: '🔧 Mécaniciens (Usine & Atelier)',
             actuel: eff.mecaniciens,
             requis: req.mecaniciens,
-            regle: '1 mécanicien requis pour 3 engins. En sous-effectif, l’usure quotidienne augmente fortement.',
+            regle: `1 mécanicien requis par installation fixe (${nbFixes} : Trémie, Convoyeur, Traitement, Lavage) + 1 mécano d'atelier pour 3 engins roulants.`,
             cout: t.coutMecano,
             salaire: t.salaireMecanoJour
         },

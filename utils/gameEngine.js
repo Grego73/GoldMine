@@ -211,7 +211,24 @@ async function synchroniserHorlogeServeur() {
 
                 const nbEnginsActifs = fleetRes.rows.length + rentalsRes.rows.length;
 
-                const mecaRequis = nbEnginsActifs > 0 ? Math.ceil(nbEnginsActifs / (cfg.enginsParMecano || 3)) : 0;
+                const tousEngins = [
+                    ...fleetRes.rows.map(f => ({ ...f, _kind: 'FLEET' })),
+                    ...rentalsRes.rows.map(r => ({ ...r, _kind: 'RENTAL' }))
+                ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 3) - (parseFloat(a.vitesse_reglee_th) || 3));
+
+                const estInstallationFixe = (cat) => {
+                    const c = (cat || '').toLowerCase();
+                    return c.includes('trém') || c.includes('trem') || c.includes('convoy') || c.includes('traitement') || c.includes('lavage');
+                };
+
+                const nbEnginsRoulants = tousEngins.filter(e => !estInstallationFixe(e.categorie)).length;
+                const nbInstallationsFixes = tousEngins.filter(e => estInstallationFixe(e.categorie)).length;
+
+                // Mécaniciens : 1 par installation fixe + 1 pour 3 engins roulants
+                const mecaFixesRequis = nbInstallationsFixes;
+                const mecaAtelierRequis = nbEnginsRoulants > 0 ? Math.ceil(nbEnginsRoulants / (cfg.enginsParMecano || 3)) : 0;
+                const mecaRequis = mecaFixesRequis + mecaAtelierRequis;
+
                 const multUsureMecano = mecaniciens < mecaRequis ? (cfg.usureSansMecanoMult || 1.5) : 1.0;
                 const multUsureCadre = hasMaintenance ? 0.75 : 1.0;
 
@@ -219,13 +236,9 @@ async function synchroniserHorlogeServeur() {
                 const chefsRequis = totalOuvriers > 0 ? Math.ceil(totalOuvriers / (cfg.ouvriersParChef || 8)) : 0;
                 const multProdChef = chefsEquipe < chefsRequis ? (1 - (cfg.malusManqueChefPct || 0.20)) : 1.0;
 
-                const tousEngins = [
-                    ...fleetRes.rows.map(f => ({ ...f, _kind: 'FLEET' })),
-                    ...rentalsRes.rows.map(r => ({ ...r, _kind: 'RENTAL' }))
-                ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 3) - (parseFloat(a.vitesse_reglee_th) || 3));
-
                 const debitsSecteur = {};
                 let conducteursDispo = conducteurs;
+                let mecaniciensFixesDispo = mecaniciens;
                 const reqParEnginDefaut = parseInt(cfg.conducteursRequisParEngin) || 2;
 
                 let coutCarburantHoraire = 0;
@@ -235,10 +248,21 @@ async function synchroniserHorlogeServeur() {
 
                 for (const item of tousEngins) {
                     const catLower = (item.categorie || '').toLowerCase();
-                    const reqPourCetEngin = catLower.includes('convoy') ? 1 : reqParEnginDefaut;
-                    const affectes = Math.min(reqPourCetEngin, conducteursDispo);
-                    conducteursDispo -= affectes;
-                    const ratioHoraire = affectes / reqPourCetEngin;
+                    const isFixe = estInstallationFixe(item.categorie);
+
+                    let ratioHoraire = 0;
+                    if (isFixe) {
+                        // 1 mécanicien requis par installation fixe (Trémie, Convoyeur, Traitement, Lavage)
+                        if (mecaniciensFixesDispo >= 1) {
+                            mecaniciensFixesDispo -= 1;
+                            ratioHoraire = 1;
+                        }
+                    } else {
+                        // 2 conducteurs requis par engin roulant (Excavation, Transport, Chargement)
+                        const affectes = Math.min(reqParEnginDefaut, conducteursDispo);
+                        conducteursDispo -= affectes;
+                        ratioHoraire = affectes / reqParEnginDefaut;
+                    }
 
                     const vReglee = parseFloat(item.vitesse_reglee_th) || 3;
                     const vMax = parseFloat(item.vitesse_max_th) || 5;
@@ -261,11 +285,12 @@ async function synchroniserHorlogeServeur() {
                             sommeUsure += 100;
                         } else {
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
                             if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
                             else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
-                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyage += debitEffectif;
+                            else if (catLower.includes('trém') || catLower.includes('trem')) debitsSecteur[sIdx].Tremie += debitEffectif;
+                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyeur += debitEffectif;
                             else if (catLower.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
                             else if (catLower.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
                             else debitsSecteur[sIdx].Excavation += debitEffectif;
@@ -280,11 +305,12 @@ async function synchroniserHorlogeServeur() {
                         if (ratioHoraire > 0) {
                             coutCarburantHoraire += ((parseFloat(item.carburant_jour) / 24) * ratioVitesse * ratioHoraire) * heuresEcoulees;
                             const sIdx = parseInt(item.parcelle_index) || 0;
-                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+                            if (!debitsSecteur[sIdx]) debitsSecteur[sIdx] = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
                             const debitEffectif = vReglee * ratioHoraire * cadence * heuresEcoulees;
                             if (catLower.includes('transport')) debitsSecteur[sIdx].Transport += debitEffectif;
                             else if (catLower.includes('charg')) debitsSecteur[sIdx].Chargement += debitEffectif;
-                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyage += debitEffectif;
+                            else if (catLower.includes('trém') || catLower.includes('trem')) debitsSecteur[sIdx].Tremie += debitEffectif;
+                            else if (catLower.includes('convoy')) debitsSecteur[sIdx].Convoyeur += debitEffectif;
                             else if (catLower.includes('traitement')) debitsSecteur[sIdx].Traitement += debitEffectif;
                             else if (catLower.includes('lavage')) debitsSecteur[sIdx].Lavage += debitEffectif;
                             else debitsSecteur[sIdx].Excavation += debitEffectif;
@@ -324,10 +350,11 @@ async function synchroniserHorlogeServeur() {
                     const p = parcelles.at(idx);
                     if (!p || !p.estSondee || p.reserveReelle <= 0) continue;
 
-                    const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
-                    const debitAmont = Math.min(d.Excavation, d.Transport, d.Chargement, d.Convoyage);
+                    const d = debitsSecteur[idx] || { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+                    const debitAmont = Math.min(d.Excavation, d.Transport, d.Chargement, d.Tremie, d.Convoyeur);
                     const debitTraitement = Math.min(debitAmont, d.Traitement);
                     const debitChaine = Math.min(debitTraitement, d.Lavage);
+
 
                     let prodManuelle = 0;
                     if (idx === parseInt(mine.parcelle_active) && !greve) {

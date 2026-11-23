@@ -50,6 +50,11 @@ const TROMBINOSCOPE_POSTES = [
     }
 ];
 
+function estInstallationFixe(cat) {
+    const c = (cat || '').toLowerCase();
+    return c.includes('trém') || c.includes('trem') || c.includes('convoy') || c.includes('traitement') || c.includes('lavage');
+}
+
 // 1. ÉTAT COMPLET DES RESSOURCES HUMAINES & TROMBINOSCOPE
 router.get('/', requireAuth, async (req, res) => {
     const userId = req.session.userId;
@@ -61,17 +66,25 @@ router.get('/', requireAuth, async (req, res) => {
         );
         const m = mineRes.rows.at(0);
 
-        // Nombre d'engins actifs (propriété + locations en cours)
-        const fleetRes = await pool.query(`SELECT COUNT(*) FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF'`, [userId]);
-        const rentRes = await pool.query(`SELECT COUNT(*) FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS'`, [userId]);
-        const nbEngins = parseInt(fleetRes.rows.at(0).count) + parseInt(rentRes.rows.at(0).count);
+        // Engins actifs (propriété + locations en cours) séparés entre roulants et installations fixes
+        const fleetRes = await pool.query(`SELECT categorie FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF'`, [userId]);
+        const rentRes = await pool.query(`SELECT categorie FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS'`, [userId]);
+        const tousActifs = [...fleetRes.rows, ...rentRes.rows];
+
+        const nbEngins = tousActifs.length;
+        const nbRoulants = tousActifs.filter(e => !estInstallationFixe(e.categorie)).length;
+        const nbFixes = tousActifs.filter(e => estInstallationFixe(e.categorie)).length;
 
         const condActuels = parseInt(m.conducteurs) || 0;
         const mecaActuels = parseInt(m.mecaniciens) || 0;
         const chefsActuels = parseInt(m.chefs_equipe) || 0;
 
-        const condRequis = nbEngins * (parseInt(cfg.conducteursRequisParEngin) || 2);
-        const mecaRequis = nbEngins > 0 ? Math.ceil(nbEngins / (parseInt(cfg.enginsParMecano) || 3)) : 0;
+        // 2 conducteurs par engin roulant | 1 mécanicien par installation fixe + 1 mécano pour 3 engins roulants
+        const condRequis = nbRoulants * (parseInt(cfg.conducteursRequisParEngin) || 2);
+        const mecaFixesRequis = nbFixes;
+        const mecaAtelierRequis = nbRoulants > 0 ? Math.ceil(nbRoulants / (parseInt(cfg.enginsParMecano) || 3)) : 0;
+        const mecaRequis = mecaFixesRequis + mecaAtelierRequis;
+
         const totalOuvriers = condActuels + mecaActuels;
         const chefsRequis = totalOuvriers > 0 ? Math.ceil(totalOuvriers / (parseInt(cfg.ouvriersParChef) || 8)) : 0;
 
@@ -86,6 +99,8 @@ router.get('/', requireAuth, async (req, res) => {
             },
             requis: {
                 nbEngins,
+                nbRoulants,
+                nbFixes,
                 conducteurs: condRequis,
                 mecaniciens: mecaRequis,
                 chefsEquipe: chefsRequis
@@ -115,7 +130,7 @@ router.get('/', requireAuth, async (req, res) => {
 
 // 2. RECRUTER OU LICENCIER UN OUVRIER (CONDUCTEUR / MÉCANO / CHEF)
 router.post('/worker', requireAuth, async (req, res) => {
-    const { roleType, action } = req.body; // roleType: 'conducteur' | 'mecano' | 'chef', action: 'hire' | 'fire'
+    const { roleType, action } = req.body;
     const userId = req.session.userId;
     const cfg = getGameConfig();
 

@@ -97,21 +97,16 @@
                 </div>
 
                 <div style="margin-top:14px;">
-                    <p style="margin-bottom:4px;"><strong>Mineurs (<span id="exp-mineurs">0</span>)</strong> — <span id="desc-mineur" style="color:#a8a29e;"></span></p>
-                    <div class="ui two buttons">
-                        <button id="btn-embaucher" class="ui green button" onclick="actionMine('embaucher')">Recruter</button>
-                        <button id="btn-prime" class="ui yellow button" onclick="actionMine('prime')">Prime Moral</button>
-                    </div>
+                <p style="margin-bottom: 6px;"><strong>⛏️ Orpaillage artisanal (<span id="exp-mineurs">5</span> / 10 max)</strong> — <span id="desc-mineur" style="color:#a8a29e;"></span></p>
+                <div class="two ui buttons" style="margin-bottom: 14px;">
+                    <button id="btn-embaucher" class="ui green button" onclick="actionMine('embaucher')">Recruter</button>
+                    <button id="btn-prime" class="ui yellow button" onclick="actionMine('prime')">Prime</button>
+                </div>
                 </div>
 
                 <div style="margin-top:14px;">
-                    <p style="margin-bottom:4px;"><strong>Engins (<span id="exp-foreuses">0</span> | Usure <span id="exp-usure">0%</span>)</strong> — <span id="desc-foreuse" style="color:#a8a29e;"></span></p>
-                    <div class="ui two buttons">
-                        <button id="btn-foreuse" class="ui blue button" onclick="actionMine('foreuse')">Acheter Base</button>
-                        <button id="btn-reparer" class="ui orange button" onclick="actionMine('reparer')">Réviser</button>
-                    </div>
-                    <button class="ui fluid yellow button" style="margin-top:8px;" onclick="changerOnglet('materiel', document.getElementById('nav-materiel')); chargerModuleMateriel();">
-                        🚜 Accéder à la Boutique Neuf, Brocante, Enchères & Location
+                    <p style="margin-bottom: 6px;"><strong>🚜 Parc Industriel (<span id="exp-foreuses">0</span> engin(s) | Usure <span id="exp-usure">0%</span>)</strong></p>
+                    <button class="ui fluid yellow button" onclick="allerVersMissionTutoriel('materiel')">🚜 Accéder à la Boutique Neuf, Brocante, Enchères & Location</button>
                     </button>
                 </div>
             </div>

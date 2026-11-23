@@ -144,6 +144,17 @@ function majAffichage(logs = null) {
     document.getElementById('exp-foreuses').innerText = etat.foreuses;
     document.getElementById('exp-usure').innerText = Math.round(etat.usure) + '%';
 
+    const btnEmb = document.getElementById('btn-embaucher');
+    if (btnEmb) {
+        if ((parseInt(etat.mineurs) || 0) >= 10) {
+            btnEmb.disabled = true;
+            btnEmb.innerText = 'Plafond atteint (10/10)';
+        } else {
+            btnEmb.disabled = false;
+            btnEmb.innerText = `Recruter (${CONFIG.coutMineur} €)`;
+        }
+    }
+
     document.getElementById('coffre-grammes').innerText = Math.round(etat.stockOr).toLocaleString() + ' g';
     document.getElementById('mkt-my').innerText = etat.marketingPoints.toFixed(1) + ' pts';
     document.getElementById('mkt-avg').innerText = market.moyenneMarketingSecteur + ' pts';
@@ -281,26 +292,25 @@ function calculerStatsSecteur(idx) {
     ];
     const affectes = fleetAll.filter(e => parseInt(e.parcelle_index) === idx);
 
-    const debits = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
-    const counts = { Excavation: 0, Transport: 0, Chargement: 0, Convoyage: 0, Traitement: 0, Lavage: 0 };
+    const debits = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
+    const counts = { Excavation: 0, Transport: 0, Chargement: 0, Tremie: 0, Convoyeur: 0, Traitement: 0, Lavage: 0 };
 
     for (const e of affectes) {
         const v = parseFloat(e.vitesse_reglee_th) || 0;
         const cat = (e.categorie || '').toLowerCase();
         if (cat.includes('transport')) { debits.Transport += v; counts.Transport += 1; }
         else if (cat.includes('charg')) { debits.Chargement += v; counts.Chargement += 1; }
-        else if (cat.includes('convoy')) { debits.Convoyage += v; counts.Convoyage += 1; }
+        else if (cat.includes('trém') || cat.includes('trem')) { debits.Tremie += v; counts.Tremie += 1; }
+        else if (cat.includes('convoy')) { debits.Convoyeur += v; counts.Convoyeur += 1; }
         else if (cat.includes('traitement')) { debits.Traitement += v; counts.Traitement += 1; }
         else if (cat.includes('lavage')) { debits.Lavage += v; counts.Lavage += 1; }
         else { debits.Excavation += v; counts.Excavation += 1; }
     }
 
-    // Chaîne en 6 étapes dans l'ordre : Excavation -> Transport -> Chargement -> Convoyage -> Traitement -> Lavage
-    const debitAmont = Math.min(debits.Excavation, debits.Transport, debits.Chargement, debits.Convoyage);
+    const debitAmont = Math.min(debits.Excavation, debits.Transport, debits.Chargement, debits.Tremie, debits.Convoyeur);
     const debitTraitement = Math.min(debitAmont, debits.Traitement);
     const debitChaine = Math.min(debitTraitement, debits.Lavage);
-
-    const debitMax = Math.max(debits.Excavation, debits.Transport, debits.Chargement, debits.Convoyage, debits.Traitement, debits.Lavage);
+    const debitMax = Math.max(debits.Excavation, debits.Transport, debits.Chargement, debits.Tremie, debits.Convoyeur, debits.Traitement, debits.Lavage);
     const estEquilibre = debitChaine > 0 && debitChaine === debitMax;
 
     let debitMineurs = 0;
@@ -313,6 +323,7 @@ function calculerStatsSecteur(idx) {
     return { affectes, debits, counts, debitChaine, debitMax, estEquilibre, debitMineurs, totalTerreTh };
 }
 
+
 function dessinerCarte() {
     const grid = document.getElementById('mapGrid');
     if (!grid) return;
@@ -323,11 +334,10 @@ function dessinerCarte() {
 
         if (p.estSondee) {
             const st = calculerStatsSecteur(i);
-            const detailMat = `⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🚜${st.counts.Chargement} 📥${st.counts.Convoyage} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
+            const detailMat = `⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🚜${st.counts.Chargement} 📥${st.counts.Tremie} ➿${st.counts.Convoyeur} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
             const badgeTop = p.id === etat.parcelleActive
                 ? '<div class="ui green label">ACTIF</div>'
                 : '<div class="ui blue label">SONDÉ</div>';
-
             const infoTeneur = p.id === etat.parcelleActive
                 ? `${Math.round(p.reserveReelle)} t (${p.pureteReelle} g/t)`
                 : `Est: ~${p.estimationPurete} g/t | Dépl: ${CONFIG.coutDemenagement}€`;
@@ -543,31 +553,33 @@ function rendreChantierSecteur(idx) {
         { nom: '1. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
         { nom: '2. 🚛 Transport', val: st.debits.Transport, nb: st.counts.Transport },
         { nom: '3. 🚜 Chargement', val: st.debits.Chargement, nb: st.counts.Chargement },
-        { nom: '4. 📥 Convoyage', val: st.debits.Convoyage, nb: st.counts.Convoyage },
-        { nom: '5. ⚙️ Traitement', val: st.debits.Traitement, nb: st.counts.Traitement },
-        { nom: '6. 💧 Lavage', val: st.debits.Lavage, nb: st.counts.Lavage }
+        { nom: '4. 📥 Trémie', val: st.debits.Tremie, nb: st.counts.Tremie },
+        { nom: '5. ➿ Convoyeur', val: st.debits.Convoyeur, nb: st.counts.Convoyeur },
+        { nom: '6. ⚙️ Traitement', val: st.debits.Traitement, nb: st.counts.Traitement },
+        { nom: '7. 💧 Lavage', val: st.debits.Lavage, nb: st.counts.Lavage }
     ];
+    const gridEl = document.getElementById('sector-debits-grid');
+    gridEl.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(125px, 1fr)); gap:8px; margin-bottom:10px;';
 
-    document.getElementById('sector-debits-grid').innerHTML = maillons.map(m => {
+    gridEl.innerHTML = maillons.map(m => {
         const isMin = m.val === st.debitChaine;
-        const surplus = st.debitChaine > 0 && m.val > st.debitChaine ? ` (+${+(m.val - st.debitChaine).toFixed(1)} t/h perdus)` : '';
+        const borderColor = m.val === 0 ? '#ef4444' : isMin && st.estEquilibre ? '#34d399' : isMin ? '#fbbf24' : '#f97316';
+        const statusTxt = m.val === 0 ? '🚨 Manquant' : st.estEquilibre ? '⚖️ Synchro' : isMin ? '⚠️ Limitant' : '⚠️ Surrégime';
         return `
-            <div class="ui inverted segment" style="border-bottom: 3px solid ${m.val === 0 ? '#ef4444' : isMin && st.estEquilibre ? '#34d399' : isMin ? '#fbbf24' : '#f97316'};">
-                <div style="font-size:0.88em; color:#a8a29e;">${m.nom} (${m.nb} engin${m.nb > 1 ? 's' : ''})</div>
-                <div style="font-size:1.3em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'};">${m.val} t/h</div>
-                <div style="font-size:0.8em; color:#d6d3d1;">
-                    ${m.val === 0 ? '🚨 Manquant' : st.estEquilibre ? '⚖️ Rendement synchronisé' : isMin ? '⚠️ Maillon limitant' : `⚠️ Surrégime${surplus}`}
-                </div>
+            <div style="background:#1c1917; padding:8px 10px; border-radius:6px; border:1px solid #44403c; border-bottom:3px solid ${borderColor}; text-align:center;">
+                <div style="font-size:0.8em; color:#a8a29e; white-space:nowrap;">${m.nom} (${m.nb})</div>
+                <div style="font-size:1.15em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'}; margin:2px 0;">${m.val} t/h</div>
+                <div style="font-size:0.75em; color:#d6d3d1;">${statusTxt}</div>
             </div>
         `;
     }).join('');
 
     const alertEl = document.getElementById('sector-bottleneck-alert');
     if (st.debitChaine <= 0) {
-        alertEl.innerHTML = `<span class="ui red label">🚨 Chaîne incomplète (0 t/h mécanisé) : il faut les 6 étapes dans l'ordre (⛏️ Excavation → 🚛 Transport → 🚜 Chargement → 📥 Convoyage → ⚙️ Traitement → 💧 Lavage) !</span>`;
+        alertEl.innerHTML = `<span class="ui red label">🚨 Chaîne incomplète (0 t/h mécanisé) : il faut les 7 étapes dans l'ordre (⛏️ Excavation → 🚛 Transport → 🚜 Chargement → 📥 Trémie → ➿ Convoyeur → ⚙️ Traitement → 💧 Lavage) !</span>`;
     } else if (!st.estEquilibre) {
         const orHeure = +(st.totalTerreTh * p.pureteReelle).toFixed(2);
-        alertEl.innerHTML = `<span class="ui orange label">⚠️ Rendements déséquilibrés : la chaîne est bridée à ${st.debitChaine} t/h (Total avec mineurs : ${st.totalTerreTh} t/h ≈ ${orHeure} g/h). Alignez les 6 étapes sur ${st.debitChaine} t/h pour économiser carburant et usure !</span>`;
+        alertEl.innerHTML = `<span class="ui orange label">⚠️ Rendements déséquilibrés : la chaîne est bridée à ${st.debitChaine} t/h (Total avec mineurs : ${st.totalTerreTh} t/h ≈ ${orHeure} g/h). Alignez les 7 étapes sur ${st.debitChaine} t/h pour économiser carburant et usure !</span>`;
     } else {
         const orHeure = +(st.totalTerreTh * p.pureteReelle).toFixed(2);
         alertEl.innerHTML = `<span class="ui green label">⚖️ Chaîne parfaitement synchronisée à ${st.debitChaine} t/h (Total terre traitée : ${st.totalTerreTh} t/h ≈ ${orHeure} g d'or brut / heure)</span>`;
