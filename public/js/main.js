@@ -164,6 +164,19 @@ function majAffichage(logs = null) {
     dessinerClientsMarche();
 }
 
+function allerVersMissionTutoriel(ongletCible) {
+    const navItems = document.querySelectorAll('.mine-nav .item');
+    let menuEl = navItems.at(0);
+    if (ongletCible === 'materiel') menuEl = document.getElementById('nav-materiel');
+    if (ongletCible === 'prospection') menuEl = navItems.at(2);
+    if (ongletCible === 'marche') menuEl = navItems.at(3);
+
+    changerOnglet(ongletCible, menuEl);
+    if (ongletCible === 'materiel' && typeof chargerModuleMateriel === 'function') {
+        chargerModuleMateriel();
+    }
+}
+
 function afficherTutoriel() {
     const banner = document.getElementById('tutorial-banner');
     if (!banner) return;
@@ -178,20 +191,62 @@ function afficherTutoriel() {
     const mults = [1, 1, 1.5, 1.5, 2.5];
     const gain = Math.round(primeBase * (mults.at(step - 1) || 1));
 
+    const nbSondees = Array.isArray(parcelles) ? parcelles.filter(p => p.estSondee).length : 0;
+
     const missions = [
-        { titre: 'Prospection géologique', desc: 'Allez dans l’onglet Prospection et sondez au moins 1 nouvelle parcelle vierge.' },
-        { titre: 'Renforcer l’équipe', desc: 'Recrutez au moins 1 mineur supplémentaire (objectif : 6 mineurs actifs).' },
-        { titre: 'Équiper la flotte', desc: 'Achetez un 2e engin neuf dans Matériel & Marché (objectif : 2 engins en flotte).' },
-        { titre: 'Notoriété commerciale', desc: 'Lancez une campagne marketing dans Bourse & Clients (objectif : 20 pts de notoriété).' },
-        { titre: 'Première vente d’or', desc: 'Vendez votre stock d’or à un acheteur international dans Bourse & Clients.' }
+        {
+            titre: 'Prospection géologique',
+            desc: 'Allez dans l’onglet Prospection et sondez au moins 1 nouvelle parcelle vierge.',
+            pret: nbSondees >= 2,
+            onglet: 'prospection'
+        },
+        {
+            titre: 'Renforcer l’équipe',
+            desc: 'Recrutez au moins 1 mineur supplémentaire (objectif : 6 mineurs actifs).',
+            pret: (parseInt(etat.mineurs) || 0) >= 6,
+            onglet: 'mine'
+        },
+        {
+            titre: 'Équiper la flotte',
+            desc: 'Achetez un 2e engin neuf dans Matériel (objectif : 2 engins en flotte).',
+            pret: (parseInt(etat.foreuses) || 0) >= 2,
+            onglet: 'materiel'
+        },
+        {
+            titre: 'Notoriété commerciale',
+            desc: 'Lancez une campagne marketing dans Bourse & Clients (objectif : 20 pts).',
+            pret: (parseFloat(etat.marketingPoints) || 0) >= 20,
+            onglet: 'marche'
+        },
+        {
+            titre: 'Première vente d’or',
+            desc: 'Vendez votre stock d’or à un acheteur international dans Bourse & Clients.',
+            pret: true,
+            onglet: 'marche'
+        }
     ];
 
     const m = missions.at(step - 1);
     document.getElementById('tuto-badge').innerText = `🎓 Tutoriel ${step} / 5`;
     document.getElementById('tuto-title').innerText = `${m.titre} — Récompense : +${gain.toLocaleString()} €`;
     document.getElementById('tuto-desc').innerText = m.desc;
+
+    const btnAction = document.getElementById('btn-tuto-action');
+    if (btnAction) {
+        if (m.pret) {
+            btnAction.className = 'ui green button';
+            btnAction.innerText = '🎁 Valider & Encaisser';
+            btnAction.onclick = () => reclamerTutoriel();
+        } else {
+            btnAction.className = 'ui yellow button';
+            btnAction.innerText = '👉 Voir';
+            btnAction.onclick = () => allerVersMissionTutoriel(m.onglet);
+        }
+    }
+
     banner.style.display = 'block';
 }
+
 
 async function reclamerTutoriel() {
     const res = await fetch('/api/game/claim-tutorial', { method: 'POST' });
