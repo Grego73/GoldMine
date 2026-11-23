@@ -27,7 +27,7 @@ function rendreEffectifsTerrain(data) {
             titre: '🚜 Conducteurs d’Engins Roulants',
             actuel: eff.conducteurs,
             requis: req.conducteurs,
-            regle: `2 conducteurs requis par engin roulant (${nbRoulants} engin(s) : Excavatrice, Camion, Chargeuse). Sans conducteur, l'engin reste à l'arrêt.`,
+            regle: `2 conducteurs requis par engin roulant (${nbRoulants} engin(s) : Foreuse, Grue, Bulldozer, Excavatrice, Camion, Chargeuse). Sans conducteur, l'engin reste à l'arrêt.`,
             cout: t.coutConducteur,
             salaire: t.salaireConducteurJour
         },
