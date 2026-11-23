@@ -34,6 +34,7 @@
         <span class="status-item">📅 Jour : <strong id="stat-jour">1</strong></span>
         <span class="status-item">💶 Trésorerie : <span id="stat-argent" class="money-text">0 €</span></span>
         <span class="status-item">🪙 Stock Or : <span id="stat-stock" class="gold-text">0 g</span></span>
+        span>| Collecte du jour : <strong id="stat-or-jour" style="color:#34d399;">+0 g</strong></span>
         <span class="status-item">📊 Cours : <span id="stat-cours" class="gold-text">60.00 €/g</span></span>
         <span class="status-item">📣 Notoriété : <strong id="stat-mkt" style="color:#fbbf24;">10 pts</strong></span>
     </div>
@@ -98,6 +99,7 @@
 
                 <div style="margin-top:14px;">
                 <p style="margin-bottom: 6px;"><strong>⛏️ Orpaillage artisanal (<span id="exp-mineurs">5</span> / 10 max)</strong> — <span id="desc-mineur" style="color:#a8a29e;"></span></p>
+                <p id="desc-mineur-total" style="font-size:0.88em; color:#fbbf24; margin-bottom:8px;"></p>
                 <div class="two ui buttons" style="margin-bottom: 14px;">
                     <button id="btn-embaucher" class="ui green button" onclick="actionMine('embaucher')">Recruter</button>
                     <button id="btn-prime" class="ui yellow button" onclick="actionMine('prime')">Prime</button>

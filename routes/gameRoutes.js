@@ -71,6 +71,20 @@ router.get('/state', requireAuth, async (req, res) => {
 
         const fleetSectorRes = await pool.query(`SELECT * FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' ORDER BY id ASC`, [req.session.userId]);
         const rentalsSectorRes = await pool.query(`SELECT * FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS' ORDER BY id ASC`, [req.session.userId]);
+        const prodAujRes = await pool.query(`
+            SELECT details FROM player_logs
+            WHERE user_id = $1
+              AND category = 'MINE'
+              AND details LIKE '%Extraction horaire%'
+              AND created_at >= CURRENT_DATE
+        `, [req.session.userId]);
+
+        let orAujourdhui = 0;
+        for (const r of prodAujRes.rows) {
+            const m = r.details.match(/\+(\d+(?:\.\d+)?)g d'or/i);
+            if (m) orAujourdhui += parseFloat(m.at(1)) || 0;
+        }
+        orAujourdhui = +orAujourdhui.toFixed(2);
 
         res.json({
             user: userRes.rows.at(0),
@@ -92,7 +106,8 @@ router.get('/state', requireAuth, async (req, res) => {
                 pendingEvent: mine.pending_event,
                 tutorialStep: mine.tutorial_step || 1,
                 fraisSemaine: parseFloat(mine.frais_semaine_accumules) || 0,
-                factureEnAttente: parseFloat(mine.facture_en_attente) || 0
+                factureEnAttente: parseFloat(mine.facture_en_attente) || 0,
+                orAujourdhui
             },
             market: {
                 coursOr: parseFloat(mkt.cours_or),

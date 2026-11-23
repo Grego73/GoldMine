@@ -141,6 +141,18 @@ function majAffichage(logs = null) {
     document.getElementById('kpi-usure').innerText = Math.round(etat.usure) + '%';
 
     document.getElementById('exp-mineurs').innerText = etat.mineurs;
+
+    const elOrJour = document.getElementById('stat-or-jour');
+    if (elOrJour) elOrJour.innerText = `+${(parseFloat(etat.orAujourdhui) || 0).toLocaleString()} g`;
+
+    const nbMineurs = parseInt(etat.mineurs) || 0;
+    const totalTonnesMineurs = +(nbMineurs * (parseFloat(CONFIG.prodMineurTonnes) || 1.5)).toFixed(1);
+    const totalSalaireMineurs = Math.round(nbMineurs * (parseFloat(CONFIG.salaireMineurJour) || 120));
+    const elTotalMineur = document.getElementById('desc-mineur-total');
+    if (elTotalMineur) {
+        elTotalMineur.innerText = `📊 Total équipe (${nbMineurs} mineurs) : ${totalTonnesMineurs} t/j | Masse salariale : ${totalSalaireMineurs.toLocaleString()} €/j`;
+    }
+
     document.getElementById('exp-foreuses').innerText = etat.foreuses;
     document.getElementById('exp-usure').innerText = Math.round(etat.usure) + '%';
 
