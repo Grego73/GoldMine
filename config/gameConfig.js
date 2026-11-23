@@ -27,11 +27,17 @@ function getGameConfig() {
     return cachedConfig;
 }
 
+// Calcule la profondeur (de 10 m à 60 m max) des 12 secteurs A à L
+function calculerProfondeurSecteur(i) {
+    return Math.min(60, 10 + Math.round((i * 50) / 11));
+}
+
 // Génère les 12 concessions d'une nouvelle mine
 function genererParcellesInitiales() {
     return Array.from({ length: 12 }, (_, i) => ({
         id: i,
         nom: "Secteur " + String.fromCharCode(65 + i),
+        profondeurMetres: calculerProfondeurSecteur(i),
         reserveReelle: i === 0 ? 1000 : Math.floor(Math.random() * 2500) + 900,
         pureteReelle: i === 0 ? 5.0 : +(Math.random() * 7.5 + 2.5).toFixed(1),
         estSondee: i === 0,
@@ -39,4 +45,4 @@ function genererParcellesInitiales() {
     }));
 }
 
-module.exports = { loadGameConfig, getGameConfig, genererParcellesInitiales };
+module.exports = { loadGameConfig, getGameConfig, genererParcellesInitiales, calculerProfondeurSecteur };

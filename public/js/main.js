@@ -51,7 +51,7 @@ function dessinerGraphiqueCours(historique) {
         ctx.fill();
         if (i === 0 || i === pts.length - 1 || pts.length <= 8) {
             ctx.fillStyle = '#a8a29e';
-            ctx.fillText(historique[i].label, p.x - 10, h - 4);
+            ctx.fillText(historique.at(i).label, p.x - 10, h - 4);
         }
     });
 }
@@ -99,7 +99,6 @@ async function chargerEtatJeu() {
             linkTchat.href = dataLinks.tchatgcUrl;
         }
 
-        // Libellés dynamiques depuis game_settings (sécurisés si élément absent)
         setTxt('info-heure-cloture', `${CONFIG.heureClotureJour}h00`);
         setTxt('info-cycle-heures', CONFIG.cycleMarcheHeures);
         setTxt('desc-mineur', `Extrait ${CONFIG.prodMineurTonnes}t/j | Salaire : ${CONFIG.salaireMineurJour} €/j`);
@@ -127,7 +126,7 @@ async function chargerEtatJeu() {
 }
 
 function majAffichage(logs = null) {
-    const pActive = parcelles[etat.parcelleActive] || parcelles[0];
+    const pActive = parcelles.at(etat.parcelleActive) || parcelles.at(0);
     document.getElementById('stat-jour').innerText = etat.jour;
     document.getElementById('stat-argent').innerText = Math.round(etat.argent).toLocaleString() + ' €';
     document.getElementById('stat-stock').innerText = Math.round(etat.stockOr).toLocaleString() + ' g';
@@ -150,7 +149,39 @@ function majAffichage(logs = null) {
     const totalSalaireMineurs = Math.round(nbMineurs * (parseFloat(CONFIG.salaireMineurJour) || 120));
     const elTotalMineur = document.getElementById('desc-mineur-total');
     if (elTotalMineur) {
-        elTotalMineur.innerText = `📊 Total équipe (${nbMineurs} mineurs) : ${totalTonnesMineurs} t/j | Masse salariale : ${totalSalaireMineurs.toLocaleString()} €/j`;
+        const stActif = calculerStatsSecteur(etat.parcelleActive);
+        const cadenceVal = parseFloat(etat.cadence) || 1;
+        const moralVal = parseFloat(etat.moral) || 100;
+        const cadresList = Array.isArray(etat.cadres) ? etat.cadres : [];
+        let multOr = 1.0;
+        if (cadresList.includes('METALLURGISTE')) multOr += 0.10;
+        if (cadresList.length >= 6) multOr += (parseFloat(CONFIG.bonusTrombinoscopeCompletPct) || 0.15);
+
+        const conducteurs = parseInt(etat.conducteurs) || 0;
+        const mecaniciens = parseInt(etat.mecaniciens) || 0;
+        const chefsEquipe = parseInt(etat.chefsEquipe) || 0;
+        const totalOuvriers = conducteurs + mecaniciens;
+        const chefsRequis = totalOuvriers > 0 ? Math.ceil(totalOuvriers / (parseInt(CONFIG.ouvriersParChef) || 8)) : 0;
+        const multProdChef = chefsEquipe < chefsRequis ? (1 - (parseFloat(CONFIG.malusManqueChefPct) || 0.20)) : 1.0;
+
+        const debitReelMineursTh = +(stActif.debitMineurs * multProdChef).toFixed(2);
+        const pureteAct = parseFloat(pActive.pureteReelle) || 0;
+        const orMineursHeure = +(debitReelMineursTh * pureteAct * multOr).toFixed(2);
+        const orMineursJour = +(orMineursHeure * 24).toFixed(1);
+
+        let infoExtraction = '';
+        if (stActif.estEnDecapage) {
+            infoExtraction = `<span style="color:#fb923c;">🚧 En pause (décapage des terres stériles en cours sur ${pActive.nom})</span>`;
+        } else if (moralVal < 25) {
+            infoExtraction = `<span style="color:#f87171;">🚨 Grève (moral &lt; 25%) : 0 g/h</span>`;
+        } else {
+            infoExtraction = `<span style="color:#34d399;">⛏️ Extraction réelle : <strong>${debitReelMineursTh} t/h</strong> (≈ <strong>${orMineursHeure} g/h</strong> | <strong>${orMineursJour} g/j</strong> à ${pureteAct} g/t, cadence ${cadenceVal}x, moral ${Math.round(moralVal)}%)</span>`;
+        }
+
+        elTotalMineur.innerHTML = `
+            <div>📊 Total équipe (${nbMineurs} mineurs) : ${totalTonnesMineurs} t/j théorique | Masse salariale : ${totalSalaireMineurs.toLocaleString()} €/j</div>
+            <div style="margin-top:3px;">${infoExtraction}</div>
+        `;
     }
 
     document.getElementById('exp-foreuses').innerText = etat.foreuses;
@@ -198,11 +229,94 @@ function majAffichage(logs = null) {
     if (elFacture) elFacture.innerText = `${Math.round(etat.factureEnAttente || 0).toLocaleString()} €`;
     if (btnFacture) btnFacture.style.display = (etat.factureEnAttente || 0) > 0 ? 'inline-block' : 'none';
 
+    rendreDetailFrais();
     afficherTutoriel();
     dessinerCarte();
     dessinerClientsMarche();
     if (typeof rendreChantierSecteur === 'function') rendreChantierSecteur(secteurInspecteIdx);
+}
 
+function toggleDetailFrais() {
+    const box = document.getElementById('detail-frais-box');
+    if (!box) return;
+    box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    rendreDetailFrais();
+}
+
+function rendreDetailFrais() {
+    const box = document.getElementById('detail-frais-box');
+    if (!box || box.style.display === 'none') return;
+
+    const mineurs = parseInt(etat.mineurs) || 0;
+    const conducteurs = parseInt(etat.conducteurs) || 0;
+    const mecaniciens = parseInt(etat.mecaniciens) || 0;
+    const chefsEquipe = parseInt(etat.chefsEquipe) || 0;
+    const cadres = Array.isArray(etat.cadres) ? etat.cadres : [];
+
+    const salMineursJ = mineurs * (parseFloat(CONFIG.salaireMineurJour) || 120);
+    const salCondJ = conducteurs * (parseFloat(CONFIG.salaireConducteurJour) || 160);
+    const salMecaJ = mecaniciens * (parseFloat(CONFIG.salaireMecanoJour) || 210);
+    const salChefsJ = chefsEquipe * (parseFloat(CONFIG.salaireChefJour) || 320);
+    const salCadresJ = cadres.length * (parseFloat(CONFIG.salaireCadreJour) || 550);
+    const totalSalairesJ = salMineursJ + salCondJ + salMecaJ + salChefsJ + salCadresJ;
+
+    const fleetAll = [
+        ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []).map(f => ({ ...f, _kind: 'FLEET' })),
+        ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : []).map(r => ({ ...r, _kind: 'RENTAL' }))
+    ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 3) - (parseFloat(a.vitesse_reglee_th) || 3));
+
+    const estFixe = (cat) => {
+        const c = (cat || '').toLowerCase();
+        return c.includes('trém') || c.includes('trem') || c.includes('convoy') || c.includes('traitement') || c.includes('lavage');
+    };
+
+    let condDispo = conducteurs;
+    let mecaDispo = mecaniciens;
+    const reqCond = parseInt(CONFIG.conducteursRequisParEngin) || 2;
+
+    let carburantJ = 0;
+    let loyersJ = 0;
+
+    for (const item of fleetAll) {
+        let ratio = 0;
+        if (estFixe(item.categorie)) {
+            if (mecaDispo >= 1) { mecaDispo -= 1; ratio = 1; }
+        } else {
+            const aff = Math.min(reqCond, condDispo);
+            condDispo -= aff;
+            ratio = aff / reqCond;
+        }
+        const vReg = parseFloat(item.vitesse_reglee_th) || 3;
+        const vMax = parseFloat(item.vitesse_max_th) || 5;
+        const ratioVit = Math.max(0.1, vReg / vMax);
+
+        if (ratio > 0) {
+            carburantJ += (parseFloat(item.carburant_jour) || 0) * ratioVit * ratio;
+        }
+        if (item._kind === 'RENTAL') {
+            loyersJ += (parseFloat(item.loyer_jour) || 0);
+        }
+    }
+
+    const totalJour = totalSalairesJ + carburantJ + loyersJ;
+    const totalHeure = totalJour / 24;
+
+    box.innerHTML = `
+        <div style="font-weight:700; color:#fbbf24; margin-bottom:6px;">📋 Ventilation des charges d'exploitation :</div>
+        <div style="display:grid; grid-template-columns:1fr auto; gap:4px 12px;">
+            <span>⛏️ Orpailleurs (${mineurs}) :</span><strong>${Math.round(salMineursJ).toLocaleString()} €/j (${(salMineursJ / 24).toFixed(2)} €/h)</strong>
+            <span>🚜 Conducteurs (${conducteurs}) :</span><strong>${Math.round(salCondJ).toLocaleString()} €/j (${(salCondJ / 24).toFixed(2)} €/h)</strong>
+            <span>🔧 Mécaniciens (${mecaniciens}) :</span><strong>${Math.round(salMecaJ).toLocaleString()} €/j (${(salMecaJ / 24).toFixed(2)} €/h)</strong>
+            <span>👷 Chefs d'équipe (${chefsEquipe}) :</span><strong>${Math.round(salChefsJ).toLocaleString()} €/j (${(salChefsJ / 24).toFixed(2)} €/h)</strong>
+            <span>🏛️ Directeurs / Cadres (${cadres.length}) :</span><strong>${Math.round(salCadresJ).toLocaleString()} €/j (${(salCadresJ / 24).toFixed(2)} €/h)</strong>
+            <span>⛽ Carburant engins actifs :</span><strong>${Math.round(carburantJ).toLocaleString()} €/j (${(carburantJ / 24).toFixed(2)} €/h)</strong>
+            <span>🤝 Loyers locations :</span><strong>${Math.round(loyersJ).toLocaleString()} €/j (${(loyersJ / 24).toFixed(2)} €/h)</strong>
+        </div>
+        <div style="margin-top:8px; padding-top:6px; border-top:1px solid #44403c; display:flex; justify-content:space-between; color:#fbbf24;">
+            <span>Rythme actuel : <strong>${totalHeure.toFixed(2)} €/h</strong> (${Math.round(totalJour).toLocaleString()} €/j)</span>
+            <span>Cumul semaine : <strong>${Math.round(etat.fraisSemaine || 0).toLocaleString()} €</strong></span>
+        </div>
+    `;
 }
 
 function allerVersMissionTutoriel(ongletCible) {
@@ -288,13 +402,13 @@ function afficherTutoriel() {
     banner.style.display = 'block';
 }
 
-
 async function reclamerTutoriel() {
     const res = await fetch('/api/game/claim-tutorial', { method: 'POST' });
     const data = await res.json();
     afficherToast(data.message || data.error, !data.success);
     if (data.success) await chargerEtatJeu();
 }
+
 function calculerStatsSecteur(idx) {
     const p = parcelles.at(idx);
     const fleetAll = [
@@ -309,6 +423,7 @@ function calculerStatsSecteur(idx) {
     for (const e of affectes) {
         const v = parseFloat(e.vitesse_reglee_th) || 0;
         const cat = (e.categorie || '').toLowerCase();
+        if (cat.includes('forag') || cat.includes('levag') || cat.includes('grue')) continue;
         if (cat.includes('décap') || cat.includes('decap')) { debits.Decapage += v; counts.Decapage += 1; }
         else if (cat.includes('transport')) { debits.Transport += v; counts.Transport += 1; }
         else if (cat.includes('charg')) { debits.Chargement += v; counts.Chargement += 1; }
@@ -346,13 +461,18 @@ function dessinerCarte() {
         const div = document.createElement('div');
         div.className = 'pit-tile' + (p.id === etat.parcelleActive ? ' active' : '') + (p.reserveReelle <= 0 ? ' depleted' : '');
 
+        const prof = parseInt(p.profondeurMetres) || Math.min(60, 10 + Math.round((i * 50) / 11));
+        const maxP = parseFloat(CONFIG.profondeurMaxForagePetit) || 20;
+        const maxM = parseFloat(CONFIG.profondeurMaxForageMoyen) || 40;
+        const badgeForeuse = prof <= maxP ? 'Foreuse Petit' : prof <= maxM ? 'Foreuse Moyen' : 'Foreuse Géant';
+
         if (p.estSondee) {
             const st = calculerStatsSecteur(i);
             const detailMat = `🚜${st.counts.Decapage} | ⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🏗️${st.counts.Chargement} 📥${st.counts.Tremie} ➿${st.counts.Convoyeur} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
 
-            let badgeTop = '<div class="ui blue label">SONDÉ</div>';
-            if (p.id === etat.parcelleActive) badgeTop = '<div class="ui green label">ACTIF</div>';
-            else if (st.estEnDecapage) badgeTop = '<div class="ui orange label">🚧 DÉCAPAGE</div>';
+            let badgeTop = `<div class="ui blue label">SONDÉ • ${prof}m</div>`;
+            if (p.id === etat.parcelleActive) badgeTop = `<div class="ui green label">ACTIF • ${prof}m</div>`;
+            else if (st.estEnDecapage) badgeTop = `<div class="ui orange label">🚧 DÉCAPAGE • ${prof}m</div>`;
 
             const infoTeneur = p.id === etat.parcelleActive
                 ? `${Math.round(p.reserveReelle)} t (${p.pureteReelle} g/t)`
@@ -402,7 +522,12 @@ function dessinerCarte() {
                 ${btnChantier}
             `;
         } else {
-            div.innerHTML = `<div class="ui label">VIERGE</div><h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4><small>Sonder: ${CONFIG.coutCarottage}€</small>`;
+            div.innerHTML = `
+                <div class="ui label">VIERGE • ${prof} m</div>
+                <h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4>
+                <div style="font-size:0.82em; color:#fbbf24; margin-bottom:2px;">🛢️ Requis : ${badgeForeuse}</div>
+                <small>Sonder : ${CONFIG.coutCarottage}€</small>
+            `;
         }
 
         div.onclick = () => actionMine('parcelle', p.id);

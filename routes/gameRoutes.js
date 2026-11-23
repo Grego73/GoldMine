@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/db');
-const { getGameConfig } = require('../config/gameConfig');
+const { getGameConfig, calculerProfondeurSecteur } = require('../config/gameConfig');
 const { synchroniserHorlogeServeur } = require('../utils/gameEngine');
 
 function getSessionUserId(req) {
@@ -86,6 +86,11 @@ router.get('/state', requireAuth, async (req, res) => {
         }
         orAujourdhui = +orAujourdhui.toFixed(2);
 
+        const parcellesNormalisees = (mine.parcelles || []).map((p, idx) => ({
+            ...p,
+            profondeurMetres: parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx)
+        }));
+
         res.json({
             user: userRes.rows.at(0),
             config: cfg,
@@ -96,13 +101,17 @@ router.get('/state', requireAuth, async (req, res) => {
                 argent: parseFloat(mine.argent),
                 stockOr: parseFloat(mine.stock_or),
                 mineurs: mine.mineurs,
+                conducteurs: parseInt(mine.conducteurs) || 0,
+                mecaniciens: parseInt(mine.mecaniciens) || 0,
+                chefsEquipe: parseInt(mine.chefs_equipe) || 0,
+                cadres: Array.isArray(mine.cadres) ? mine.cadres : [],
                 foreuses: nbTotalEngins,
                 moral: parseFloat(mine.moral),
                 usure: parseFloat(mine.usure),
                 cadence: parseFloat(mine.cadence),
                 marketingPoints: parseFloat(mine.marketing_points),
                 parcelleActive: mine.parcelle_active,
-                parcelles: mine.parcelles,
+                parcelles: parcellesNormalisees,
                 pendingEvent: mine.pending_event,
                 tutorialStep: mine.tutorial_step || 1,
                 fraisSemaine: parseFloat(mine.frais_semaine_accumules) || 0,
@@ -205,6 +214,38 @@ router.post('/action', requireAuth, async (req, res) => {
             }
 
             if (!p.estSondee) {
+                const profondeur = parseInt(p.profondeurMetres) || calculerProfondeurSecteur(id);
+                const maxPetit = parseFloat(cfg.profondeurMaxForagePetit) || 20;
+                const maxMoyen = parseFloat(cfg.profondeurMaxForageMoyen) || 40;
+                const maxGeant = parseFloat(cfg.profondeurMaxForageGeant) || 60;
+
+                const foreusesRes = await client.query(
+                    `SELECT gabarit FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' AND LOWER(categorie) LIKE '%forage%'
+                     UNION ALL
+                     SELECT c.gabarit FROM active_rentals r JOIN equipment_catalog c ON c.id = r.catalog_id WHERE r.renter_id = $1 AND r.statut = 'EN_COURS' AND LOWER(r.categorie) LIKE '%forage%'`,
+                    [userId]
+                );
+
+                let capaciteForageMax = 0;
+                for (const f of foreusesRes.rows) {
+                    const g = (f.gabarit || 'Petit').toLowerCase();
+                    if (g.includes('g')) capaciteForageMax = Math.max(capaciteForageMax, maxGeant);
+                    else if (g === 'moyen') capaciteForageMax = Math.max(capaciteForageMax, maxMoyen);
+                    else capaciteForageMax = Math.max(capaciteForageMax, maxPetit);
+                }
+
+                if (capaciteForageMax < profondeur) {
+                    const gabRequis = profondeur <= maxPetit
+                        ? `Petit (jusqu'à ${maxPetit}m)`
+                        : profondeur <= maxMoyen
+                        ? `Moyen (jusqu'à ${maxMoyen}m)`
+                        : `Géant (jusqu'à ${maxGeant}m)`;
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({
+                        error: `Foreuse insuffisante pour ${p.nom} (${profondeur} m de profondeur) ! Il faut une foreuse de gabarit ${gabRequis} en service.`
+                    });
+                }
+
                 const hasGeologue = Array.isArray(mine.cadres) && mine.cadres.includes('GEOLOGUE');
                 const coutCarottageReel = hasGeologue ? Math.round(cfg.coutCarottage * 0.7) : cfg.coutCarottage;
                 if (argent < coutCarottageReel) {
@@ -212,6 +253,7 @@ router.post('/action', requireAuth, async (req, res) => {
                     return res.status(400).json({ error: 'Trésorerie insuffisante' });
                 }
                 argent -= coutCarottageReel;
+                p.profondeurMetres = profondeur;
                 p.estSondee = true;
                 p.estDecapee = false;
                 const ratioSteriles = parseFloat(cfg.ratioSterilesDecapage) || 0.15;
@@ -220,7 +262,7 @@ router.post('/action', requireAuth, async (req, res) => {
 
                 const erreur = (Math.random() * 0.4) - 0.2;
                 p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
-                message = `Carottage ${p.nom} : teneur ~${p.estimationPurete} g/t | Décapage requis : ${p.sterilesTotal} t de stériles (-${coutCarottageReel} €).`;
+                message = `Carottage ${p.nom} (${profondeur} m) : teneur ~${p.estimationPurete} g/t | Décapage requis : ${p.sterilesTotal} t de stériles (-${coutCarottageReel} €).`;
             } else {
                 if (p.estDecapee === false && (parseFloat(p.sterilesRestants) || 0) > 0) {
                     await client.query('ROLLBACK');
@@ -310,7 +352,7 @@ router.post('/sell-client', requireAuth, async (req, res) => {
 
         if (qte > stockOr) {
             await clientDb.query('ROLLBACK');
-            return res.status(400).json({ error: 'Stock d’or insuffisant dans votre coffre.' });
+            return res.status(400).json({ error: 'Stock d’or insuffisante dans votre coffre.' });
         }
         if (qte > demande) {
             await clientDb.query('ROLLBACK');
@@ -503,3 +545,4 @@ router.post('/claim-tutorial', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+

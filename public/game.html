@@ -77,7 +77,16 @@
                 <div class="ui inverted segment" style="margin-bottom:12px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
                         <div>
-                            <span style="color:#a8a29e; font-size:0.88em;">Frais en cours (semaine) :</span>
+                            <div style="background:#1c1917; border:1px solid #44403c; border-radius:6px; padding:10px 12px; margin-bottom:12px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                                    <span onclick="toggleDetailFrais()" style="cursor:pointer; user-select:none;" title="Cliquer pour voir le détail des frais horaires et journaliers">
+                                        Frais en cours (semaine) : <strong id="kpi-frais-semaine" style="color:#fbbf24; text-decoration:underline dotted;">0 €</strong> <small style="color:#a8a29e;">ℹ️ Détail</small>
+                                    </span>
+                                    <span>Facture à payer : <strong id="kpi-facture-attente" style="color:#f87171;">0 €</strong></span>
+                                    <button id="btn-payer-facture" class="ui mini green button" style="display:none;" onclick="actionMine('payer_facture')">🧾 Payer la facture</button>
+                                </div>
+                                <div id="detail-frais-box" style="display:none; margin-top:10px; padding-top:8px; border-top:1px dashed #44403c; font-size:0.86em; color:#d6d3d1;"></div>
+                            </div>
                             <strong id="kpi-frais-semaine" style="color:#fbbf24;">0 €</strong>
                             <span style="margin-left:10px; color:#a8a29e; font-size:0.88em;">Facture à payer :</span>
                             <strong id="kpi-facture-attente" style="color:#f87171;">0 €</strong>

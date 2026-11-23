@@ -9,7 +9,7 @@ function filtrerCatalogueBoutique(cat, gab) {
 }
 
 function trierCatalogueLogique(liste) {
-    const ordreCat = { Décapage: 1, Excavation: 2, Transport: 3, Chargement: 4, Trémie: 5, Convoyeur: 6, Traitement: 7, Lavage: 8 };
+    const ordreCat = { Forage: 1, Levage: 2, Décapage: 3, Excavation: 4, Transport: 5, Chargement: 6, Trémie: 7, Convoyeur: 8, Traitement: 9, Lavage: 10 };
     const ordreGab = { Petit: 1, Moyen: 2, Géant: 3 };
     return [...liste].sort((a, b) => {
         const cA = ordreCat[a.categorie] || 99;
@@ -57,6 +57,9 @@ function rendreMaFlotte() {
             const usure = Math.round(parseFloat(f.usure_actuelle));
             const gab = f.gabarit || 'Moyen';
             const nbPieces = parseInt(f.pieces_panne) || 1;
+            const isGrue = (f.categorie || '').toLowerCase().includes('levag');
+            const nivGrue = gab === 'Petit' ? 1 : gab === 'Géant' ? 3 : 2;
+            const infoGrue = isGrue ? '' : ` + Grue Niv.${nivGrue}`;
 
             const badgeStatut = f.statut === 'ACTIF'
                 ? '<span class="ui green label">En service</span>'
@@ -70,12 +73,12 @@ function rendreMaFlotte() {
 
             let actions = '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
             if (f.statut === 'EN_PANNE') {
-                actions = `<button class="ui mini red button" onclick="reparerPanne(${f.id})">🚨 Réparer (${nbPieces} pièce(s) ${f.categorie} ${gab})</button>`;
+                actions = `<button class="ui mini red button" onclick="reparerPanne(${f.id})">🚨 Réparer (${nbPieces} pièce(s) ${f.categorie} ${gab}${infoGrue})</button>`;
             } else if (f.statut === 'OFFRE_LOC') {
                 actions = `<button class="ui mini red button" onclick="annulerOffreLocation(${f.id})">❌ Retirer l'offre</button>`;
             } else if (f.statut === 'ACTIF') {
                 actions = `
-                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%)</button>
+                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%${infoGrue})</button>
                     <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
                     <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
                 `;
@@ -127,6 +130,8 @@ function rendreBoutiqueNeuf() {
 
     const categories = [
         { id: 'TOUS', label: '🌐 Tous' },
+        { id: 'Forage', label: '🛢️ Forage (Sondage)' },
+        { id: 'Levage', label: '🏗️ Levage (Grues)' },
         { id: 'Décapage', label: '🚜 Décapage (Bulldozer)' },
         { id: 'Excavation', label: '⛏️ Excavation' },
         { id: 'Transport', label: '🚛 Transport' },
@@ -136,7 +141,6 @@ function rendreBoutiqueNeuf() {
         { id: 'Traitement', label: '⚙️ Traitement' },
         { id: 'Lavage', label: '💧 Lavage' }
     ];
-
 
     const gabarits = [
         { id: 'TOUS', label: 'Tous gabarits' },
@@ -192,12 +196,12 @@ function rendreBoutiqueNeuf() {
         </div>
     `).join('');
 }
-// 3. CONCESSIONNAIRES SPÉCIALISÉS & PIÈCES DÉTACHÉES (6 FAMILLES)
+
+// 3. CONCESSIONNAIRES SPÉCIALISÉS & PIÈCES DÉTACHÉES (10 FAMILLES)
 function rendreConcessionnaires() {
     const grid = document.getElementById('eq-dealers-grid');
     if (!grid || !eqData || !eqData.tarifsPieces) return;
-
-    const familles = ['Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
+    const familles = ['Forage', 'Levage', 'Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
     const gabarits = ['Petit', 'Moyen', 'Géant'];
     const stock = eqData.piecesStock || {};
 
@@ -412,7 +416,6 @@ async function ouvrirLocationEngin(fleetId) {
     if (!loyerJour) return;
     const dureeJours = prompt('Durée du contrat de location (1 à 7 jours max) :', '3');
     if (!dureeJours) return;
-
     const res = await fetch('/api/equipment/offer-rental', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -459,4 +462,5 @@ async function louerPdg(rentalId) {
     chargerModuleMateriel();
     if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
+
 

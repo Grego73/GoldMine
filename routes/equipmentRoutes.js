@@ -10,12 +10,14 @@ function requireAuth(req, res, next) {
     next();
 }
 
-const FAMILLES_MATERIEL = ['Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
+const FAMILLES_MATERIEL = ['Forage', 'Levage', 'Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
 
 function calculerPrixPiece(cfg, categorie, gabarit) {
     const cat = (categorie || '').toLowerCase();
     let base = parseFloat(cfg.prixPieceExcavation) || 500;
-    if (cat.includes('décap') || cat.includes('decap')) base = parseFloat(cfg.prixPieceDecapage) || 650;
+    if (cat.includes('forag')) base = parseFloat(cfg.prixPieceForage) || 550;
+    else if (cat.includes('levag') || cat.includes('grue')) base = parseFloat(cfg.prixPieceLevage) || 650;
+    else if (cat.includes('décap') || cat.includes('decap')) base = parseFloat(cfg.prixPieceDecapage) || 650;
     else if (cat.includes('transport')) base = parseFloat(cfg.prixPieceTransport) || 600;
     else if (cat.includes('charg')) base = parseFloat(cfg.prixPieceChargement) || 550;
     else if (cat.includes('trém') || cat.includes('trem')) base = parseFloat(cfg.prixPieceTremie) || 450;
@@ -31,8 +33,32 @@ function calculerPrixPiece(cfg, categorie, gabarit) {
     return Math.round(base * coeff);
 }
 
+function niveauGabarit(gabarit) {
+    const g = (gabarit || 'Moyen').toLowerCase();
+    if (g === 'petit') return 1;
+    if (g.includes('g')) return 3;
+    return 2;
+}
 
+async function verifierGrueMaintenance(clientDb, userId, engin) {
+    const catLower = (engin.categorie || '').toLowerCase();
+    if (catLower.includes('levag') || catLower.includes('grue')) {
+        return { ok: true, nivRequis: 0, nivGrueMax: 3 };
+    }
 
+    const nivRequis = niveauGabarit(engin.gabarit);
+    const gruesRes = await clientDb.query(
+        `SELECT gabarit FROM player_fleet WHERE owner_id = $1 AND statut = 'ACTIF' AND LOWER(categorie) LIKE '%levag%'
+         UNION ALL
+         SELECT c.gabarit FROM active_rentals r JOIN equipment_catalog c ON c.id = r.catalog_id WHERE r.renter_id = $1 AND r.statut = 'EN_COURS' AND LOWER(r.categorie) LIKE '%levag%'`,
+        [userId]
+    );
+    let nivGrueMax = 0;
+    for (const g of gruesRes.rows) {
+        nivGrueMax = Math.max(nivGrueMax, niveauGabarit(g.gabarit));
+    }
+    return { ok: nivGrueMax >= nivRequis, nivRequis, nivGrueMax };
+}
 
 // =========================================================================
 // 1. ÉTAT COMPLET DU MATÉRIEL (Ma Flotte, Boutique, Brocante/Enchères, Location)
@@ -99,8 +125,6 @@ router.get('/', requireAuth, async (req, res) => {
             rentalOffers: offersRes.rows,
             myActiveRentals: myRentalsRes.rows
         });
-
-
     } catch (err) {
         console.error('Erreur GET /api/equipment :', err);
         res.status(500).json({ error: 'Erreur chargement module matériel' });
@@ -491,6 +515,15 @@ router.post('/repair', requireAuth, async (req, res) => {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: 'Impossible de réviser un engin actuellement loué.' });
         }
+
+        const checkGrue = await verifierGrueMaintenance(client, userId, engin);
+        if (!checkGrue.ok) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+                error: `Grue Niveau ${checkGrue.nivRequis} requise pour réviser un engin de gabarit ${engin.gabarit || 'Moyen'} (votre grue max : Niveau ${checkGrue.nivGrueMax}).`
+            });
+        }
+
         if (parseFloat(mineRes.rows.at(0).argent) < cout) {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: 'Trésorerie insuffisante.' });
@@ -575,6 +608,14 @@ router.post('/fix-breakdown', requireAuth, async (req, res) => {
         if (engin.statut !== 'EN_PANNE') {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: 'Cet engin n’est pas en panne.' });
+        }
+
+        const checkGrue = await verifierGrueMaintenance(client, userId, engin);
+        if (!checkGrue.ok) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({
+                error: `Grue Niveau ${checkGrue.nivRequis} requise pour dépanner un engin de gabarit ${engin.gabarit || 'Moyen'} (votre grue max : Niveau ${checkGrue.nivGrueMax}).`
+            });
         }
 
         const famNorm = FAMILLES_MATERIEL.find(f => (engin.categorie || '').toLowerCase().includes(f.toLowerCase())) || 'Excavation';
