@@ -191,7 +191,7 @@ router.post('/action', requireAuth, async (req, res) => {
             message = `Prime versée aux équipes (+15% moral / -${cfg.coutPrime} €).`;
         } else if (type === 'cadence') {
             const val = parseFloat(payload);
-            if (![0.8, 1, 1.25].includes(val)) {
+            if (isNaN(val) || val < 0.5 || val > 1.5) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ error: 'Cadence invalide' });
             }
