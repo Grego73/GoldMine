@@ -81,29 +81,36 @@ async function chargerEtatJeu() {
         market = data.market;
         parcelles = data.mine.parcelles;
 
-        document.getElementById('stat-username').innerText = data.user.username;
+        const setTxt = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        };
+
+        setTxt('stat-username', data.user.username);
         if (data.user.role === 'admin') {
-            document.getElementById('btn-admin-link').style.display = 'inline-flex';
+            const btnAdm = document.getElementById('btn-admin-link');
+            if (btnAdm) btnAdm.style.display = 'inline-flex';
         }
 
         const resLinks = await fetch('/api/links');
         const dataLinks = await resLinks.json();
-        if (dataLinks.tchatgcUrl) {
-            document.getElementById('link-tchatgc-game').href = dataLinks.tchatgcUrl;
+        const linkTchat = document.getElementById('link-tchatgc-game');
+        if (dataLinks.tchatgcUrl && linkTchat) {
+            linkTchat.href = dataLinks.tchatgcUrl;
         }
 
-        // Libellés dynamiques depuis game_settings
-        document.getElementById('info-heure-cloture').innerText = `${CONFIG.heureClotureJour}h00`;
-        document.getElementById('info-cycle-heures').innerText = CONFIG.cycleMarcheHeures;
-        document.getElementById('desc-mineur').innerText = `Extrait ${CONFIG.prodMineurTonnes}t/j | Salaire : ${CONFIG.salaireMineurJour} €/j`;
-        document.getElementById('btn-embaucher').innerText = `Recruter (${CONFIG.coutMineur} €)`;
-        document.getElementById('desc-foreuse').innerText = `Extrait ${CONFIG.prodForeuseTonnes}t/j | Carburant : ${CONFIG.carburantForeuseJour} €/j`;
-        document.getElementById('btn-foreuse').innerText = `Acheter (${CONFIG.coutForeuse} €)`;
-        document.getElementById('btn-reparer').innerText = `Réviser (${CONFIG.coutRevision} €)`;
-        document.getElementById('btn-prime').innerText = `Prime (${CONFIG.coutPrime} €)`;
-        document.getElementById('btn-marketing').innerText = `Campagne Marketing +10 pts (${CONFIG.coutUniteMarketing} €)`;
-        document.getElementById('desc-prospection').innerText = `Carottage : ${CONFIG.coutCarottage} € | Déménagement engins : ${CONFIG.coutDemenagement} €`;
-        document.getElementById('desc-taxe').innerText = `Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%`;
+        // Libellés dynamiques depuis game_settings (sécurisés si élément absent)
+        setTxt('info-heure-cloture', `${CONFIG.heureClotureJour}h00`);
+        setTxt('info-cycle-heures', CONFIG.cycleMarcheHeures);
+        setTxt('desc-mineur', `Extrait ${CONFIG.prodMineurTonnes}t/j | Salaire : ${CONFIG.salaireMineurJour} €/j`);
+        setTxt('btn-embaucher', `Recruter (${CONFIG.coutMineur} €)`);
+        setTxt('desc-foreuse', `Extrait ${CONFIG.prodForeuseTonnes}t/j | Carburant : ${CONFIG.carburantForeuseJour} €/j`);
+        setTxt('btn-foreuse', `Acheter (${CONFIG.coutForeuse} €)`);
+        setTxt('btn-reparer', `Réviser (${CONFIG.coutRevision} €)`);
+        setTxt('btn-prime', `Prime (${CONFIG.coutPrime} €)`);
+        setTxt('btn-marketing', `Campagne Marketing +10 pts (${CONFIG.coutUniteMarketing} €)`);
+        setTxt('desc-prospection', `Carottage : ${CONFIG.coutCarottage} € | Déménagement engins : ${CONFIG.coutDemenagement} €`);
+        setTxt('desc-taxe', `Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%`);
 
         const selectCadence = document.getElementById('cadence');
         if (selectCadence) selectCadence.value = String(etat.cadence);
