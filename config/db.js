@@ -48,6 +48,9 @@ async function initDB() {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
         `);
+        await client.query(`
+            ALTER TABLE mines ADD COLUMN IF NOT EXISTS tutorial_step INTEGER DEFAULT 1;
+        `);
 
         // 3. État mondial de la Bourse & Horloge du serveur
         await client.query(`

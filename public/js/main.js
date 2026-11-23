@@ -159,9 +159,45 @@ function majAffichage(logs = null) {
             return `<div><span style="color:#fbbf24;">[${h}]</span> ${l.details}</div>`;
         }).join('');
     }
-
+    afficherTutoriel();
     dessinerCarte();
     dessinerClientsMarche();
+}
+
+function afficherTutoriel() {
+    const banner = document.getElementById('tutorial-banner');
+    if (!banner) return;
+
+    const step = parseInt(etat.tutorialStep) || 1;
+    if (step > 5) {
+        banner.style.display = 'none';
+        return;
+    }
+
+    const primeBase = parseFloat(CONFIG.recompenseTutorielEtape) || 0;
+    const mults = [1, 1, 1.5, 1.5, 2.5];
+    const gain = Math.round(primeBase * (mults.at(step - 1) || 1));
+
+    const missions = [
+        { titre: 'Prospection géologique', desc: 'Allez dans l’onglet Prospection et sondez au moins 1 nouvelle parcelle vierge.' },
+        { titre: 'Renforcer l’équipe', desc: 'Recrutez au moins 1 mineur supplémentaire (objectif : 6 mineurs actifs).' },
+        { titre: 'Équiper la flotte', desc: 'Achetez un 2e engin neuf dans Matériel & Marché (objectif : 2 engins en flotte).' },
+        { titre: 'Notoriété commerciale', desc: 'Lancez une campagne marketing dans Bourse & Clients (objectif : 20 pts de notoriété).' },
+        { titre: 'Première vente d’or', desc: 'Vendez votre stock d’or à un acheteur international dans Bourse & Clients.' }
+    ];
+
+    const m = missions.at(step - 1);
+    document.getElementById('tuto-badge').innerText = `🎓 Tutoriel ${step} / 5`;
+    document.getElementById('tuto-title').innerText = `${m.titre} — Récompense : +${gain.toLocaleString()} €`;
+    document.getElementById('tuto-desc').innerText = m.desc;
+    banner.style.display = 'block';
+}
+
+async function reclamerTutoriel() {
+    const res = await fetch('/api/game/claim-tutorial', { method: 'POST' });
+    const data = await res.json();
+    afficherToast(data.message || data.error, !data.success);
+    if (data.success) await chargerEtatJeu();
 }
 
 function dessinerCarte() {

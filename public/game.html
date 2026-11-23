@@ -16,6 +16,7 @@
     <a class="item" onclick="changerOnglet('marche', this)">📈 Bourse & Clients</a>
     <a class="item" onclick="changerOnglet('classement', this); chargerClassement();">🏆 Classement</a>
     <div class="right menu">
+        <a href="/regles.html" class="item">📖 Règles & Guide</a>
         <span id="countdown-cloture" class="ui label">⏳ Clôture : --h--</span>
         <span id="app-version" class="ui label"></span>
         <a href="https://onrender.com" target="_blank" id="link-tchatgc-game" class="item">💬 Tchat</a>
@@ -37,6 +38,20 @@
 
 <div class="ui container">
     <div id="game-toast" class="ui message" style="display:none;"></div>
+    <!-- BANNIÈRE TUTORIEL INTERACTIF -->
+    <div id="tutorial-banner" class="ui segment mine-card" style="display:none; border-left: 4px solid #fbbf24;">
+        <div style="display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
+            <div>
+                <span class="ui yellow label" id="tuto-badge">Mission 1 / 5</span>
+                <strong id="tuto-title" style="color:#fbbf24; margin-left:8px; font-size:1.05em;"></strong>
+                <p id="tuto-desc" style="color:#d6d3d1; margin-top:6px; margin-bottom:0;"></p>
+            </div>
+            <div style="display:flex; gap:8px;">
+                <a href="/regles.html" class="ui blue button">📖 Voir le Guide</a>
+                <button class="ui green button" onclick="reclamerTutoriel()">🎁 Valider & Encaisser</button>
+            </div>
+        </div>
+    </div>
 
     <!-- ONGLET 1 : FOSSE & ÉQUIPE -->
     <div id="tab-mine" class="tab-section">

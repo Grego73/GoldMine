@@ -192,6 +192,66 @@ async function acheterEnginNeuf(catalogId) {
     const data = await res.json();
     alert(data.message || data.error);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function reviserEngin(fleetId) {
+    const res = await fetch('/api/equipment/repair', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fleetId })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function ouvrirVenteEngin(fleetId) {
+    const choix = prompt('Vendre cet engin :\nTapez 1 pour Vente Directe (Brocante)\nTapez 2 pour Enchères', '2');
+    if (!choix) return;
+    const modeVente = choix === '1' ? 'BROCANTE' : 'ENCHERE';
+    const prixDepart = prompt('Prix de vente ou mise à prix (€) :', '3500');
+    if (!prixDepart) return;
+    const dureeHeures = prompt('Durée de l’annonce en heures (1 à 168h = 7 jours max) :', '24');
+    if (!dureeHeures) return;
+
+    const res = await fetch('/api/equipment/list-sale', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fleetId, modeVente, prixDepart, dureeHeures })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
+}
+
+async function encherirOuAcheter(auctionId, montantOffre) {
+    const res = await fetch('/api/equipment/bid', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ auctionId, montantOffre })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
+}
+
+async function ouvrirLocationEngin(fleetId) {
+    const loyerJour = prompt('Proposer cet engin en location aux autres PDG.\nLoyer journalier souhaité (€/jour) :', '400');
+    if (!loyerJour) return;
+    const dureeJours = prompt('Durée du contrat de location (1 à 7 jours max) :', '3');
+    if (!dureeJours) return;
+
+    const res = await fetch('/api/equipment/offer-rental', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fleetId, loyerJour, dureeJours })
+    });
+    const data = await res.json();
+    alert(data.message || data.error);
+    chargerModuleMateriel();
 }
 
 async function louerOfficiel(catalogId, dureeJours) {
@@ -203,6 +263,7 @@ async function louerOfficiel(catalogId, dureeJours) {
     const data = await res.json();
     alert(data.message || data.error);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }
 
 async function louerPdg(rentalId) {
@@ -214,4 +275,5 @@ async function louerPdg(rentalId) {
     const data = await res.json();
     alert(data.message || data.error);
     chargerModuleMateriel();
+    if (typeof chargerEtatJeu === 'function') chargerEtatJeu();
 }

@@ -82,11 +82,13 @@ router.get('/state', requireAuth, async (req, res) => {
                 moral: parseFloat(mine.moral),
                 usure: parseFloat(mine.usure),
                 cadence: parseFloat(mine.cadence),
-                marketingPoints: myMkt,
+                marketingPoints: parseFloat(mine.marketing_points),
                 parcelleActive: mine.parcelle_active,
                 parcelles: mine.parcelles,
-                pendingEvent: mine.pending_event
+                pendingEvent: mine.pending_event,
+                tutorialStep: mine.tutorial_step || 1
             },
+
             market: {
                 coursOr: parseFloat(mkt.cours_or),
                 historique: mkt.historique_cours,
@@ -359,6 +361,84 @@ router.get('/ranking', requireAuth, async (req, res) => {
         res.json(resRank.rows);
     } catch (err) {
         res.status(500).json({ error: 'Erreur classement' });
+    }
+});
+
+// 6. VALIDATION D'UNE ÉTAPE DU TUTORIEL & VERSEMENT DE LA RÉCOMPENSE
+router.post('/claim-tutorial', requireAuth, async (req, res) => {
+    const userId = req.session.userId;
+    const cfg = getGameConfig();
+    const primeBase = parseFloat(cfg.recompenseTutorielEtape);
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+        const mineRes = await client.query('SELECT * FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        const userRes = await client.query('SELECT username FROM users WHERE id = $1', [userId]);
+        const mine = mineRes.rows.at(0);
+        const step = parseInt(mine.tutorial_step) || 1;
+
+        if (step > 5) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Vous avez déjà terminé toutes les missions du tutoriel !' });
+        }
+
+        let conditionRemplie = false;
+        let nomMission = '';
+
+        if (step === 1) {
+            // Étape 1 : Avoir sondé au moins 2 concessions
+            const nbSondees = mine.parcelles.filter(p => p.estSondee).length;
+            conditionRemplie = nbSondees >= 2;
+            nomMission = 'Prospection géologique (2 secteurs sondés)';
+        } else if (step === 2) {
+            // Étape 2 : Posséder au moins 6 mineurs
+            conditionRemplie = parseInt(mine.mineurs) >= 6;
+            nomMission = 'Recrutement d’équipe (6 mineurs actifs)';
+        } else if (step === 3) {
+            // Étape 3 : Posséder au moins 2 engins dans sa flotte
+            const fleetRes = await client.query('SELECT COUNT(*) FROM player_fleet WHERE owner_id = $1', [userId]);
+            conditionRemplie = parseInt(fleetRes.rows.at(0).count) >= 2;
+            nomMission = 'Équipement lourd (2 engins dans la flotte)';
+        } else if (step === 4) {
+            // Étape 4 : Atteindre 20 points de notoriété marketing
+            conditionRemplie = parseFloat(mine.marketing_points) >= 20;
+            nomMission = 'Campagne commerciale (20 pts de notoriété)';
+        } else if (step === 5) {
+            // Étape 5 : Avoir effectué au moins une vente d'or
+            const venteRes = await client.query(`SELECT COUNT(*) FROM player_logs WHERE user_id = $1 AND category = 'VENTE'`, [userId]);
+            conditionRemplie = parseInt(venteRes.rows.at(0).count) >= 1;
+            nomMission = 'Première vente de lingots sur le marché';
+        }
+
+        if (!conditionRemplie) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Objectif de la mission non encore atteint !' });
+        }
+
+        // Récompense progressive : 1x, 1x, 1.5x, 1.5x, 2.5x de recompenseTutorielEtape
+        const multiplicateurs = [1, 1, 1.5, 1.5, 2.5];
+        const gain = Math.round(primeBase * (multiplicateurs.at(step - 1) || 1));
+
+        await client.query(
+            'UPDATE mines SET argent = argent + $1, tutorial_step = $2 WHERE user_id = $3',
+            [gain, step + 1, userId]
+        );
+
+        const msg = `🎓 Tutoriel Étape ${step}/5 validée (${nomMission}) : +${gain.toLocaleString()} € !`;
+        await client.query(
+            `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'TUTORIEL', $3)`,
+            [userId, userRes.rows.at(0).username, msg]
+        );
+
+        await client.query('COMMIT');
+        res.json({ success: true, message: msg });
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Erreur claim-tutorial :', err);
+        res.status(500).json({ error: 'Erreur lors de la validation du tutoriel' });
+    } finally {
+        client.release();
     }
 });
 
