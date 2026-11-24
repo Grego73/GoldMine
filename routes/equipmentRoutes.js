@@ -75,7 +75,7 @@ router.get('/', requireAuth, async (req, res) => {
 
         // Annonces Brocante & Enchères en cours
         const auctionsRes = await pool.query(`
-            SELECT a.*, f.nom, f.categorie, f.prod_tonnes, f.vitesse_min_th, f.vitesse_max_th, f.carburant_jour, f.usure_jour, f.usure_actuelle,
+            SELECT a.*, f.nom, f.categorie, f.gabarit, f.prod_tonnes, f.vitesse_min_th, f.vitesse_max_th, f.carburant_jour, f.usure_jour, f.usure_actuelle,
                    u.username AS seller_name, hb.username AS bidder_name
             FROM market_auctions a
             JOIN player_fleet f ON f.id = a.fleet_id

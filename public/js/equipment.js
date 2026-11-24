@@ -1,14 +1,72 @@
 let eqData = null;
-let eqFiltreCategorie = 'TOUS';
-let eqFiltreGabarit = 'TOUS';
+let eqFiltres = {
+    boutique: { cat: 'TOUS', gab: 'TOUS' },
+    flotte: { cat: 'TOUS', gab: 'TOUS' },
+    concession: { cat: 'TOUS', gab: 'TOUS' },
+    brocante: { cat: 'TOUS', gab: 'TOUS' },
+    location: { cat: 'TOUS', gab: 'TOUS' }
+};
 
-function filtrerCatalogueBoutique(cat, gab) {
-    if (cat !== null) eqFiltreCategorie = cat;
-    if (gab !== null) eqFiltreGabarit = gab;
-    rendreBoutiqueNeuf();
+function changerFiltreEq(zone, cat, gab) {
+    if (cat !== null) eqFiltres[zone].cat = cat;
+    if (gab !== null) eqFiltres[zone].gab = gab;
+    if (zone === 'boutique') rendreBoutiqueNeuf();
+    else if (zone === 'flotte') rendreMaFlotte();
+    else if (zone === 'concession') rendreConcessionnaires();
+    else if (zone === 'brocante') rendreBrocanteEncheres();
+    else if (zone === 'location') rendreLocationEngins();
+}
+
+function rendreBarreFiltresZone(containerId, targetEl, zone, avecGabarit = true) {
+    if (!targetEl) return;
+    let toolbar = document.getElementById(containerId);
+    if (!toolbar) {
+        toolbar = document.createElement('div');
+        toolbar.id = containerId;
+        toolbar.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:14px; padding:10px; background:#1c1917; border-radius:6px; border:1px solid #44403c;';
+        targetEl.parentNode.insertBefore(toolbar, targetEl);
+    }
+
+    const categories = [
+        { id: 'TOUS', label: '🌐 Tous' },
+        { id: 'Forage', label: '🛢️ Forage (Sondage)' },
+        { id: 'Levage', label: '🏗️ Levage (Grues)' },
+        { id: 'Décapage', label: '🚜 Décapage (Bulldozer)' },
+        { id: 'Excavation', label: '⛏️ Excavation' },
+        { id: 'Transport', label: '🚛 Transport' },
+        { id: 'Chargement', label: '🏗️ Chargement' },
+        { id: 'Trémie', label: '📥 Trémie' },
+        { id: 'Convoyeur', label: '➿ Convoyeur' },
+        { id: 'Traitement', label: '⚙️ Traitement' },
+        { id: 'Lavage', label: '💧 Lavage' }
+    ];
+
+    const gabarits = [
+        { id: 'TOUS', label: 'Tous gabarits' },
+        { id: 'Petit', label: 'Petit' },
+        { id: 'Moyen', label: 'Moyen' },
+        { id: 'Géant', label: 'Géant' }
+    ];
+
+    const fActuel = eqFiltres[zone];
+    toolbar.innerHTML = `
+        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+            ${categories.map(c => `
+                <button class="ui mini ${fActuel.cat === c.id ? 'yellow' : ''} button" onclick="changerFiltreEq('${zone}', '${c.id}', null)">${c.label}</button>
+            `).join('')}
+        </div>
+        ${avecGabarit ? `
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+            <span style="font-size:0.85em; color:#a8a29e;">Gabarit :</span>
+            ${gabarits.map(g => `
+                <button class="ui mini ${fActuel.gab === g.id ? 'blue' : ''} button" onclick="changerFiltreEq('${zone}', null, '${g.id}')">${g.label}</button>
+            `).join('')}
+        </div>` : ''}
+    `;
 }
 
 function trierCatalogueLogique(liste) {
+
     const ordreCat = { Forage: 1, Levage: 2, Décapage: 3, Excavation: 4, Transport: 5, Chargement: 6, Trémie: 7, Convoyeur: 8, Traitement: 9, Lavage: 10 };
     const ordreGab = { Petit: 1, Moyen: 2, Géant: 3 };
     return [...liste].sort((a, b) => {
@@ -50,11 +108,17 @@ function rendreMaFlotte() {
     const tbody = document.getElementById('eq-my-fleet-tbody');
     if (!tbody || !eqData) return;
 
-    if (eqData.myFleet.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucun engin en propriété. Achetez ou louez du matériel !</td></tr>';
+    rendreBarreFiltresZone('eq-fleet-filters', tbody.closest('table') || tbody, 'flotte', true);
+    let maFlotteFiltree = trierCatalogueLogique(eqData.myFleet);
+    if (eqFiltres.flotte.cat !== 'TOUS') maFlotteFiltree = maFlotteFiltree.filter(f => f.categorie === eqFiltres.flotte.cat);
+    if (eqFiltres.flotte.gab !== 'TOUS') maFlotteFiltree = maFlotteFiltree.filter(f => (f.gabarit || 'Moyen') === eqFiltres.flotte.gab);
+
+    if (maFlotteFiltree.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucun engin dans votre flotte pour ce filtre.</td></tr>';
     } else {
-        tbody.innerHTML = eqData.myFleet.map(f => {
+        tbody.innerHTML = maFlotteFiltree.map(f => {
             const usure = Math.round(parseFloat(f.usure_actuelle));
+
             const gab = f.gabarit || 'Moyen';
             const nbPieces = parseInt(f.pieces_panne) || 1;
             const isGrue = (f.categorie || '').toLowerCase().includes('levag');
@@ -99,10 +163,14 @@ function rendreMaFlotte() {
 
     const locTbody = document.getElementById('eq-my-rentals-tbody');
     if (locTbody) {
-        if (eqData.myActiveRentals.length === 0) {
-            locTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a8a29e;">Aucune location en cours.</td></tr>';
+        let mesLocationsFiltrees = trierCatalogueLogique(eqData.myActiveRentals);
+        if (eqFiltres.flotte.cat !== 'TOUS') {
+            mesLocationsFiltrees = mesLocationsFiltrees.filter(r => r.categorie === eqFiltres.flotte.cat);
+        }
+        if (mesLocationsFiltrees.length === 0) {
+            locTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a8a29e;">Aucune location en cours pour ce filtre.</td></tr>';
         } else {
-            locTbody.innerHTML = eqData.myActiveRentals.map(r => `
+            locTbody.innerHTML = mesLocationsFiltrees.map(r => `
                 <tr>
                     <td><strong>${r.nom}</strong> (${r.source_type === 'OFFICIEL' ? 'Parc Officiel' : 'PDG ' + r.owner_name})</td>
                     <td><strong>${r.vitesse_min_th}-${r.vitesse_max_th} t/h</strong></td>
@@ -120,58 +188,18 @@ function rendreBoutiqueNeuf() {
     const grid = document.getElementById('eq-shop-new-grid');
     if (!grid || !eqData) return;
 
-    let toolbar = document.getElementById('eq-shop-filters');
-    if (!toolbar) {
-        toolbar = document.createElement('div');
-        toolbar.id = 'eq-shop-filters';
-        toolbar.style.cssText = 'display:flex; flex-wrap:wrap; gap:8px; align-items:center; justify-content:space-between; margin-bottom:14px; padding:10px; background:#1c1917; border-radius:6px; border:1px solid #44403c;';
-        grid.parentNode.insertBefore(toolbar, grid);
-    }
-
-    const categories = [
-        { id: 'TOUS', label: '🌐 Tous' },
-        { id: 'Forage', label: '🛢️ Forage (Sondage)' },
-        { id: 'Levage', label: '🏗️ Levage (Grues)' },
-        { id: 'Décapage', label: '🚜 Décapage (Bulldozer)' },
-        { id: 'Excavation', label: '⛏️ Excavation' },
-        { id: 'Transport', label: '🚛 Transport' },
-        { id: 'Chargement', label: '🏗️ Chargement' },
-        { id: 'Trémie', label: '📥 Trémie' },
-        { id: 'Convoyeur', label: '➿ Convoyeur' },
-        { id: 'Traitement', label: '⚙️ Traitement' },
-        { id: 'Lavage', label: '💧 Lavage' }
-    ];
-
-    const gabarits = [
-        { id: 'TOUS', label: 'Tous gabarits' },
-        { id: 'Petit', label: 'Petit' },
-        { id: 'Moyen', label: 'Moyen' },
-        { id: 'Géant', label: 'Géant' }
-    ];
-
-    toolbar.innerHTML = `
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
-            ${categories.map(c => `
-                <button class="ui mini ${eqFiltreCategorie === c.id ? 'yellow' : ''} button" onclick="filtrerCatalogueBoutique('${c.id}', null)">${c.label}</button>
-            `).join('')}
-        </div>
-        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-            <span style="font-size:0.85em; color:#a8a29e;">Gabarit :</span>
-            ${gabarits.map(g => `
-                <button class="ui mini ${eqFiltreGabarit === g.id ? 'blue' : ''} button" onclick="filtrerCatalogueBoutique(null, '${g.id}')">${g.label}</button>
-            `).join('')}
-        </div>
-    `;
+    rendreBarreFiltresZone('eq-shop-filters', grid, 'boutique', true);
 
     let liste = trierCatalogueLogique(eqData.catalog);
-    if (eqFiltreCategorie !== 'TOUS') {
-        liste = liste.filter(item => item.categorie === eqFiltreCategorie);
+    if (eqFiltres.boutique.cat !== 'TOUS') {
+        liste = liste.filter(item => item.categorie === eqFiltres.boutique.cat);
     }
-    if (eqFiltreGabarit !== 'TOUS') {
-        liste = liste.filter(item => (item.gabarit || 'Moyen') === eqFiltreGabarit);
+    if (eqFiltres.boutique.gab !== 'TOUS') {
+        liste = liste.filter(item => (item.gabarit || 'Moyen') === eqFiltres.boutique.gab);
     }
 
     if (liste.length === 0) {
+
         grid.innerHTML = '<p style="color:#a8a29e;">Aucun engin ne correspond à ce filtre.</p>';
         return;
     }
@@ -201,9 +229,19 @@ function rendreBoutiqueNeuf() {
 function rendreConcessionnaires() {
     const grid = document.getElementById('eq-dealers-grid');
     if (!grid || !eqData || !eqData.tarifsPieces) return;
-    const familles = ['Forage', 'Levage', 'Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
-    const gabarits = ['Petit', 'Moyen', 'Géant'];
+
+    rendreBarreFiltresZone('eq-dealers-filters', grid, 'concession', true);
+
+    let familles = ['Forage', 'Levage', 'Décapage', 'Excavation', 'Transport', 'Chargement', 'Trémie', 'Convoyeur', 'Traitement', 'Lavage'];
+    if (eqFiltres.concession.cat !== 'TOUS') {
+        familles = familles.filter(f => f === eqFiltres.concession.cat);
+    }
+    let gabarits = ['Petit', 'Moyen', 'Géant'];
+    if (eqFiltres.concession.gab !== 'TOUS') {
+        gabarits = gabarits.filter(g => g === eqFiltres.concession.gab);
+    }
     const stock = eqData.piecesStock || {};
+
 
     grid.innerHTML = familles.map(fam => {
         const tarifs = eqData.tarifsPieces[fam] || {};
@@ -238,12 +276,22 @@ function rendreBrocanteEncheres() {
     const tbody = document.getElementById('eq-auctions-tbody');
     if (!tbody || !eqData) return;
 
-    if (eqData.auctions.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucune vente d’occasion ni enchère en cours.</td></tr>';
+    rendreBarreFiltresZone('eq-auctions-filters', tbody.closest('table') || tbody, 'brocante', true);
+
+    let encheresFiltrees = trierCatalogueLogique(eqData.auctions);
+    if (eqFiltres.brocante.cat !== 'TOUS') {
+        encheresFiltrees = encheresFiltrees.filter(a => a.categorie === eqFiltres.brocante.cat);
+    }
+    if (eqFiltres.brocante.gab !== 'TOUS') {
+        encheresFiltrees = encheresFiltrees.filter(a => (a.gabarit || 'Moyen') === eqFiltres.brocante.gab);
+    }
+
+    if (encheresFiltrees.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucune vente d’occasion ni enchère pour ce filtre.</td></tr>';
         return;
     }
 
-    tbody.innerHTML = eqData.auctions.map(a => {
+    tbody.innerHTML = encheresFiltrees.map(a => {
         const diffMs = Math.max(0, new Date(a.expires_at).getTime() - Date.now());
         const heuresRest = Math.floor(diffMs / 3600000);
         const minsRest = Math.floor((diffMs % 3600000) / 60000);
@@ -269,12 +317,19 @@ function rendreBrocanteEncheres() {
     }).join('');
 }
 
-// 5. LOCATION D'ENGINS (TRIÉE + BADGES ALIGNÉS À DROITE + OFFRES PDG)
+// 5. LOCATION D'ENGINS (TRIÉE + FILTRÉE + BADGES ALIGNÉS À DROITE + OFFRES PDG)
 function rendreLocationEngins() {
     const offTbody = document.getElementById('eq-official-rentals-tbody');
     if (offTbody && eqData) {
+        rendreBarreFiltresZone('eq-rentals-filters', offTbody.closest('table') || offTbody, 'location', true);
         const coeff = parseFloat(eqData.coeffLoyerJeu) || 0.08;
-        const listeTriee = trierCatalogueLogique(eqData.catalog);
+        let listeTriee = trierCatalogueLogique(eqData.catalog);
+        if (eqFiltres.location.cat !== 'TOUS') {
+            listeTriee = listeTriee.filter(item => item.categorie === eqFiltres.location.cat);
+        }
+        if (eqFiltres.location.gab !== 'TOUS') {
+            listeTriee = listeTriee.filter(item => (item.gabarit || 'Moyen') === eqFiltres.location.gab);
+        }
         offTbody.innerHTML = listeTriee.map(item => {
             const loyerEstime = Math.round(parseFloat(item.prix_neuf) * coeff);
             return `
@@ -305,10 +360,14 @@ function rendreLocationEngins() {
 
     const pdgTbody = document.getElementById('eq-pdg-rentals-tbody');
     if (pdgTbody && eqData) {
-        if (eqData.rentalOffers.length === 0) {
-            pdgTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucun PDG ne propose d’engin en location actuellement.</td></tr>';
+        let offresPdgFiltrees = trierCatalogueLogique(eqData.rentalOffers);
+        if (eqFiltres.location.cat !== 'TOUS') {
+            offresPdgFiltrees = offresPdgFiltrees.filter(o => o.categorie === eqFiltres.location.cat);
+        }
+        if (offresPdgFiltrees.length === 0) {
+            pdgTbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucun PDG ne propose d’engin en location pour ce filtre.</td></tr>';
         } else {
-            pdgTbody.innerHTML = eqData.rentalOffers.map(o => `
+            pdgTbody.innerHTML = offresPdgFiltrees.map(o => `
                 <tr>
                     <td><strong>${o.nom}</strong><br><small>Propriétaire : ${o.owner_name}</small></td>
                     <td><strong>${o.vitesse_min_th || 2}-${o.vitesse_max_th || 5} t/h</strong></td>
