@@ -38,8 +38,10 @@ function rendreBarreFiltresZone(containerId, targetEl, zone, avecGabarit = true)
         { id: 'Trémie', label: '📥 Trémie' },
         { id: 'Convoyeur', label: '➿ Convoyeur' },
         { id: 'Traitement', label: '⚙️ Traitement' },
-        { id: 'Lavage', label: '💧 Lavage' }
+        { id: 'Lavage', label: '💧 Lavage' },
+        ...(zone === 'flotte' ? [{ id: 'INACTIFS', label: '🅿️ Inactif(s)' }] : [])
     ];
+
 
     const gabarits = [
         { id: 'TOUS', label: 'Tous gabarits' },
@@ -128,7 +130,11 @@ function rendreMaFlotte() {
 
     rendreBarreFiltresZone('eq-fleet-filters', tbody.closest('table') || tbody, 'flotte', true);
     let maFlotteFiltree = trierCatalogueLogique(eqData.myFleet);
-    if (eqFiltres.flotte.cat !== 'TOUS') maFlotteFiltree = maFlotteFiltree.filter(f => f.categorie === eqFiltres.flotte.cat);
+    if (eqFiltres.flotte.cat === 'INACTIFS') {
+        maFlotteFiltree = maFlotteFiltree.filter(f => f.statut !== 'ACTIF' || parseInt(f.parcelle_index) < 0);
+    } else if (eqFiltres.flotte.cat !== 'TOUS') {
+        maFlotteFiltree = maFlotteFiltree.filter(f => f.categorie === eqFiltres.flotte.cat);
+    }
     if (eqFiltres.flotte.gab !== 'TOUS') maFlotteFiltree = maFlotteFiltree.filter(f => (f.gabarit || 'Moyen') === eqFiltres.flotte.gab);
 
     if (maFlotteFiltree.length === 0) {
@@ -178,20 +184,22 @@ function rendreMaFlotte() {
                 const prixNeuf = parseFloat(f.prix_neuf) || 5000;
                 const coutRev = usureExacte > 0 ? Math.max(50, Math.round(prixNeuf * tauxRev * (usureExacte / 100))) : 0;
                 actions = `
-                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})" ${usureExacte <= 0 ? 'disabled' : ''}>🔧 Réviser${coutRev > 0 ? ' (' + coutRev.toLocaleString() + ' €)' : ''}</button>
-                    <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
-                    <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
+                    <div style="display:flex; gap:4px; align-items:center; flex-wrap:nowrap;">
+                        <button class="ui mini blue button" style="margin:0; white-space:nowrap;" onclick="reviserEngin(${f.id})" ${usureExacte <= 0 ? 'disabled' : ''}>🔧 Réviser${coutRev > 0 ? ' (' + coutRev.toLocaleString() + ' €)' : ''}</button>
+                        <button class="ui mini orange button" style="margin:0; white-space:nowrap;" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
+                        <button class="ui mini green button" style="margin:0; white-space:nowrap;" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
+                    </div>
                 `;
             }
 
             return `
                 <tr>
-                    <td><strong>${f.nom}</strong><br><small style="color:#a8a29e;">${f.categorie} — Gabarit : <strong style="color:#fbbf24;">${gab}</strong></small></td>
-                    <td>${formaterRendementEq(f)}</td>
-                    <td>${f.carburant_jour} €/j</td>
-                    <td><strong style="color:${usure > 60 ? '#f87171' : '#34d399'};">${usure}%</strong> (+${f.usure_jour}%/j)</td>
-                    <td>${badgeStatut}</td>
-                    <td>${actions}</td>
+                    <td style="white-space:nowrap;"><strong>${f.nom}</strong> <small style="color:#a8a29e;">(${f.categorie} • <strong style="color:#fbbf24;">${gab}</strong>)</small></td>
+                    <td style="white-space:nowrap;">${formaterRendementEq(f)}</td>
+                    <td style="white-space:nowrap;">${f.carburant_jour} €/j</td>
+                    <td style="white-space:nowrap;"><strong style="color:${usure > 60 ? '#f87171' : '#34d399'};">${usure}%</strong> <small style="color:#a8a29e;">(+${f.usure_jour}%/j)</small></td>
+                    <td style="white-space:nowrap;">${badgeStatut}</td>
+                    <td style="white-space:nowrap;">${actions}</td>
                 </tr>
             `;
         }).join('');
@@ -200,9 +208,12 @@ function rendreMaFlotte() {
     const locTbody = document.getElementById('eq-my-rentals-tbody');
     if (locTbody) {
         let mesLocationsFiltrees = trierCatalogueLogique(eqData.myActiveRentals);
-        if (eqFiltres.flotte.cat !== 'TOUS') {
+        if (eqFiltres.flotte.cat === 'INACTIFS') {
+            mesLocationsFiltrees = mesLocationsFiltrees.filter(r => parseInt(r.parcelle_index) < 0);
+        } else if (eqFiltres.flotte.cat !== 'TOUS') {
             mesLocationsFiltrees = mesLocationsFiltrees.filter(r => r.categorie === eqFiltres.flotte.cat);
         }
+
         if (mesLocationsFiltrees.length === 0) {
             locTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a8a29e;">Aucune location en cours pour ce filtre.</td></tr>';
         } else {
@@ -366,7 +377,7 @@ function rendreBrocanteEncheres() {
         return `
             <tr>
                 <td><strong>${a.nom}</strong><br><small style="color:#a8a29e;">Vendeur : ${a.seller_name} | Usure : ${Math.round(a.usure_actuelle)}%</small></td>
-                <td>${formaterRendementEq(o)}</td>
+                <td>${formaterRendementEq(a)}</td>
                 <td>${isBrocante ? '<span class="ui green label">Vente Directe</span>' : '<span class="ui orange label">Enchère</span>'}</td>
                 <td class="money-text">${Math.round(a.prix_actuel).toLocaleString()} €<br><small style="color:#a8a29e;">${a.bidder_name ? 'Meneur : ' + a.bidder_name : 'Aucune offre'}</small></td>
                 <td><strong>${heuresRest}h ${minsRest}m</strong></td>
