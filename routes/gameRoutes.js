@@ -90,6 +90,10 @@ router.get('/state', requireAuth, async (req, res) => {
             ...p,
             profondeurMetres: parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx)
         }));
+        const ordersRes = await pool.query(
+            `SELECT * FROM market_sell_orders WHERE user_id = $1 AND statut = 'EN_ATTENTE' ORDER BY id ASC`,
+            [req.session.userId]
+        );
 
         res.json({
             user: userRes.rows.at(0),
@@ -113,6 +117,7 @@ router.get('/state', requireAuth, async (req, res) => {
                 parcelleActive: mine.parcelle_active,
                 parcelles: parcellesNormalisees,
                 pendingEvent: mine.pending_event,
+                pendingOrders: ordersRes.rows,
                 tutorialStep: mine.tutorial_step || 1,
                 fraisSemaine: parseFloat(mine.frais_semaine_accumules) || 0,
                 factureEnAttente: parseFloat(mine.facture_en_attente) || 0,
@@ -324,11 +329,11 @@ router.post('/sell-client', requireAuth, async (req, res) => {
     const cfg = getGameConfig();
     const userId = req.session.userId;
 
-    const margeMax = cfg.margeNegociationMax || 0.15;
+    const margeMax = parseFloat(cfg.margeNegociationMax) || 0.15;
     const marge = Math.max(-margeMax, Math.min(margeMax, parseFloat(margeDemandee) || 0));
     const qte = Math.floor(parseFloat(quantiteGrammes) || 0);
 
-    if (qte <= 0) return res.status(400).json({ error: 'Quantité invalide' });
+    if (qte <= 0) return res.status(400).json({ error: 'Quantité invalide (minimum 1 g).' });
 
     const clientDb = await pool.connect();
     try {
@@ -337,7 +342,6 @@ router.post('/sell-client', requireAuth, async (req, res) => {
         const mineRes = await clientDb.query('SELECT * FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
         const userRes = await clientDb.query('SELECT username FROM users WHERE id = $1', [userId]);
         const achRes = await clientDb.query('SELECT * FROM market_clients WHERE id = $1 FOR UPDATE', [clientId]);
-        const rankRes = await clientDb.query('SELECT COALESCE(AVG(marketing_points), 10) AS moy FROM mines');
 
         if (achRes.rows.length === 0) {
             await clientDb.query('ROLLBACK');
@@ -347,64 +351,29 @@ router.post('/sell-client', requireAuth, async (req, res) => {
         const mine = mineRes.rows.at(0);
         const acheteur = achRes.rows.at(0);
         const username = userRes.rows.at(0).username;
-        const stockOr = parseFloat(mine.stock_or);
-        const demande = parseFloat(acheteur.demande_grammes);
+        const stockOr = parseFloat(mine.stock_or) || 0;
+        const demande = parseFloat(acheteur.demande_grammes) || 0;
 
         if (qte > stockOr) {
             await clientDb.query('ROLLBACK');
-            return res.status(400).json({ error: 'Stock d’or insuffisante dans votre coffre.' });
+            return res.status(400).json({ error: 'Stock d’or insuffisant dans votre coffre.' });
         }
         if (qte > demande) {
             await clientDb.query('ROLLBACK');
             return res.status(400).json({ error: `Ce client ne demande que ${demande} g maximum.` });
         }
 
-        const myMkt = parseFloat(mine.marketing_points) || 10;
-        const moyMkt = parseFloat(rankRes.rows.at(0).moy) || 10;
-        const avantageMarketing = Math.max(-0.03, Math.min(0.05, ((myMkt - moyMkt) / Math.max(10, moyMkt)) * 0.03));
-        const toleranceReelle = parseFloat(acheteur.marge_acceptee_max) + avantageMarketing;
-
-        if (marge > toleranceReelle) {
-            const newMkt = Math.max(1, +(myMkt - 1).toFixed(1));
-            await clientDb.query('UPDATE mines SET marketing_points = $1 WHERE user_id = $2', [newMkt, userId]);
-            await clientDb.query(
-                `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
-                [userId, username, `❌ Offre refusée par ${acheteur.nom} (marge demandée ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%, plafond client dépassé).`]
-            );
-            await clientDb.query('COMMIT');
-            return res.json({
-                success: false,
-                message: `Offre refusée par ${acheteur.nom} ! Votre marge demandée (${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%) dépasse ce que l'acheteur est prêt à payer.`
-            });
-        }
-
         const prixUnitaire = +(parseFloat(acheteur.prix_base_gramme) * (1 + marge)).toFixed(2);
-        const brut = qte * prixUnitaire;
-        const taxeBase = cfg.taxeMiniere || 0.08;
-        const hasDAF = Array.isArray(mine.cadres) && mine.cadres.includes('DAF');
-        const taxe = brut * (hasDAF ? Math.max(0, taxeBase - 0.02) : taxeBase);
-        const net = +(brut - taxe).toFixed(2);
         const newStock = +(stockOr - qte).toFixed(1);
-        const newArgent = +(parseFloat(mine.argent) + net).toFixed(2);
-        const newDemande = +(demande - qte).toFixed(1);
 
-        await clientDb.query('UPDATE mines SET stock_or = $1, argent = $2 WHERE user_id = $3', [newStock, newArgent, userId]);
+        await clientDb.query('UPDATE mines SET stock_or = $1 WHERE user_id = $2', [newStock, userId]);
+        await clientDb.query(
+            `INSERT INTO market_sell_orders (user_id, client_id, client_nom, quantite_grammes, prix_unitaire, marge_demandee, statut)
+             VALUES ($1, $2, $3, $4, $5, $6, 'EN_ATTENTE')`,
+            [userId, clientId, acheteur.nom, qte, prixUnitaire, marge]
+        );
 
-        if (newDemande <= 0) {
-            await clientDb.query('DELETE FROM market_clients WHERE id = $1', [clientId]);
-        } else {
-            await clientDb.query('UPDATE market_clients SET demande_grammes = $1 WHERE id = $2', [newDemande, clientId]);
-        }
-
-        const mktRes = await clientDb.query('SELECT cours_or FROM market_state WHERE id = 1 FOR UPDATE');
-        const coursActuel = parseFloat(mktRes.rows.at(0)?.cours_or) || 60;
-        const coursMin = parseFloat(cfg.coursOrMin) || 35;
-        const impact = (qte / 1000) * (parseFloat(cfg.impactOffreDemande) || 0.02);
-        const nouveauCours = Math.max(coursMin, +(coursActuel * (1 - impact)).toFixed(2));
-        await clientDb.query(`UPDATE market_state SET cours_or = $1 WHERE id = 1`, [nouveauCours]);
-
-
-        const detailLog = `💰 Vente de ${qte}g à ${acheteur.nom} (${prixUnitaire} €/g, ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%) -> +${Math.round(net).toLocaleString()} € net`;
+        const detailLog = `📋 Offre de vente déposée pour ${acheteur.nom} : ${qte}g à ${prixUnitaire} €/g (${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%) — en attente de la clôture 4h.`;
         await clientDb.query(
             `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
             [userId, username, detailLog]
@@ -415,11 +384,53 @@ router.post('/sell-client', requireAuth, async (req, res) => {
     } catch (err) {
         await clientDb.query('ROLLBACK');
         console.error('Erreur POST /sell-client :', err);
-        res.status(500).json({ error: 'Erreur transaction : ' + err.message });
+        res.status(500).json({ error: 'Erreur lors du dépôt de l’offre : ' + err.message });
     } finally {
         clientDb.release();
     }
 });
+
+router.post('/cancel-order', requireAuth, async (req, res) => {
+    const { orderId } = req.body;
+    const userId = req.session.userId;
+
+    const clientDb = await pool.connect();
+    try {
+        await clientDb.query('BEGIN');
+        await clientDb.query('SELECT user_id FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        const userRes = await clientDb.query('SELECT username FROM users WHERE id = $1', [userId]);
+        const ordRes = await clientDb.query(
+            `SELECT * FROM market_sell_orders WHERE id = $1 AND user_id = $2 AND statut = 'EN_ATTENTE' FOR UPDATE`,
+            [orderId, userId]
+        );
+
+        if (ordRes.rows.length === 0) {
+            await clientDb.query('ROLLBACK');
+            return res.status(404).json({ error: 'Offre introuvable ou déjà traitée.' });
+        }
+
+        const ord = ordRes.rows.at(0);
+        const qte = parseFloat(ord.quantite_grammes) || 0;
+
+        await clientDb.query('UPDATE mines SET stock_or = stock_or + $1 WHERE user_id = $2', [qte, userId]);
+        await clientDb.query(`DELETE FROM market_sell_orders WHERE id = $1`, [orderId]);
+
+        const msg = `↩️ Offre de vente annulée (${qte}g pour ${ord.client_nom}) : or restitué dans votre coffre.`;
+        await clientDb.query(
+            `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+            [userId, userRes.rows.at(0).username, msg]
+        );
+
+        await clientDb.query('COMMIT');
+        res.json({ success: true, message: msg });
+    } catch (err) {
+        await clientDb.query('ROLLBACK');
+        res.status(500).json({ error: 'Erreur lors de l’annulation de l’offre' });
+    } finally {
+        clientDb.release();
+    }
+});
+
 
 // 4. RÉSOUDRE UN ÉVÉNEMENT QUOTIDIEN EN ATTENTE
 router.post('/event-choice', requireAuth, async (req, res) => {
@@ -511,9 +522,9 @@ router.post('/claim-tutorial', requireAuth, async (req, res) => {
             conditionRemplie = parseFloat(mine.marketing_points) >= 20;
             nomMission = 'Campagne commerciale (20 pts de notoriété)';
         } else if (step === 5) {
-            const venteRes = await client.query(`SELECT COUNT(*) FROM player_logs WHERE user_id = $1 AND category = 'FINANCE' AND details LIKE '💰 Vente%'`, [userId]);
+            const venteRes = await client.query(`SELECT COUNT(*) FROM player_logs WHERE user_id = $1 AND category = 'FINANCE' AND (details LIKE '💰 Vente%' OR details LIKE '📋 Offre de vente déposée%')`, [userId]);
             conditionRemplie = parseInt(venteRes.rows.at(0).count) >= 1;
-            nomMission = 'Première vente de lingots sur le marché';
+            nomMission = 'Première offre de vente de lingots sur le marché';
         }
 
         if (!conditionRemplie) {

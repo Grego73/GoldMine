@@ -1,0 +1,50 @@
+# 🗄️ MÉMOIRE 2/2 : BASE DE DONNÉES & SUIVI — GOLD MINE (V1.3.5)
+
+## 1. Les 15 Tables PostgreSQL (`config/db.js`)
+1. **`users`** : `id` (PK), `username`, `email`, `password_hash`, `role`, `is_verified`, `verification_code`, `reset_code`, `is_banned`, `created_at`.
+2. **`mines`** : `user_id` (PK), `jour`, `argent`, `stock_or`, `mineurs` (max 10), `foreuses`, `conducteurs`, `mecaniciens`, `chefs_equipe`, `cadres` (JSONB), `moral`, `usure`, `cadence`, `marketing_points`, `parcelle_active`, `parcelles` (JSONB des 12 secteurs A à L avec `profondeurMetres` 10–60m, `estSondee`, `estDecapee`, `sterilesTotal`, `sterilesRestants`, `reserveReelle`, `pureteReelle`), `pending_event`, `tutorial_step`, `pieces_detachees`, `pieces_stock` (JSONB par `Famille:Gabarit`), `frais_semaine_accumules`, `facture_en_attente`, `updated_at`.
+3. **`market_state`** : `id` (`1`), `cours_or`, `historique_cours` (JSONB), `last_market_tick` (4h), `last_daily_tick` (24h), `last_hourly_tick` (1h), `last_weekly_tick` (7j).
+4. **`clients_catalog`** : `id` (PK), `nom` (UNIQUE), `type_client`, `secteur`, `min_gr`, `max_gr`, `bonus_min`, `bonus_max`, `poids_apparition`, `actif`.
+5. **`market_clients`** : `id` (PK), `nom`, `type_client`, `secteur`, `demande_grammes`, `prix_base_gramme`, `marge_acceptee_max`, `expires_at`.
+6. **`game_settings`** : `key` (PK), `value` (NUMERIC), `label` (VARCHAR) — **74 variables pilotables depuis `/admin/settings.html`**.
+7. **`site_texts`** : `key` (PK), `title`, `content`.
+8. **`admin_logs`** : `id` (PK), `admin_username`, `action`, `created_at`.
+9. **`player_logs`** : `id` (PK), `user_id`, `username`, `category`, `details`, `created_at`.
+10. **`equipment_catalog`** : `id` (PK), `nom` (UNIQUE), `categorie` (10 familles), `gabarit` (`Petit`, `Moyen`, `Géant`), `prix_neuf`, `prod_tonnes`, `vitesse_min_th`, `vitesse_max_th`, `carburant_jour`, `usure_jour`, `pieces_panne`, `actif` — **30 équipements calibrés (3 gabarits × 10 familles)**.
+11. **`player_fleet`** : `id` (PK), `owner_id`, `catalog_id`, `nom`, `categorie`, `gabarit`, `prod_tonnes`, `vitesse_min_th`, `vitesse_max_th`, `vitesse_reglee_th`, `carburant_jour`, `usure_jour`, `pieces_panne`, `usure_actuelle`, `parcelle_index`, `statut`, `created_at`.
+12. **`market_auctions`** : `id` (PK), `fleet_id`, `seller_id`, `mode_vente`, `prix_depart`, `prix_actuel`, `highest_bidder_id`, `expires_at`, `created_at`.
+13. **`active_rentals`** : `id` (PK), `source_type`, `fleet_id`, `catalog_id`, `owner_id`, `renter_id`, `nom`, `categorie`, `prod_tonnes`, `vitesse_min_th`, `vitesse_max_th`, `vitesse_reglee_th`, `carburant_jour`, `usure_jour`, `loyer_jour`, `jours_restants`, `parcelle_index`, `statut`, `created_at`.
+14. **`player_loans`** : `id` (PK), `user_id`, `banque_code`, `banque_nom`, `montant_emprunte`, `taux_interet`, `total_a_rembourser`, `restant_du`, `echeance_jour`, `duree_jours`, `jours_restants`, `statut`, `created_at`.
+15. **`player_savings`** : `id` (PK), `user_id`, `banque_nom`, `montant_place`, `taux_rendement`, `gain_final`, `duree_jours`, `jours_restants`, `statut`, `created_at`.
+
+---
+
+## 2. Règles de Gameplay Temps Réel (v1.3.5)
+- **Forage & Profondeur (10 m à 60 m) :**
+  - Les 12 concessions ont une profondeur croissante de `10 m` (Secteur A) à `60 m` (Secteur L).
+  - Sonder une parcelle vierge exige une **Foreuse (`Forage`)** active adaptée : `Petit` (≤ 20 m), `Moyen` (≤ 40 m), `Géant` (≤ 60 m).
+- **Décapage des Terres Stériles :**
+  - Chaque nouveau secteur sondé génère des terres stériles (`ratioSterilesDecapage` = `15%` de la réserve, min `50 t`).
+  - Décapage par le trio **Bulldozer (`Décapage`) + Excavatrice (`Excavation`) + Camion benne (`Transport`)** (engins achetés ou loués).
+- **Chaîne Logistique 7 Étapes & Grues de Levage (Niv. 1–3) :**
+  - Ordre minier : **1. Excavation → 2. Transport → 3. Chargement → 4. Trémie → 5. Convoyeur → 6. Traitement → 7. Lavage**.
+  - Réviser (`-25%` usure) ou dépanner un engin exige une **Grue (`Levage`)** du niveau requis (`Petit` = Niv. 1, `Moyen` = Niv. 2, `Géant` = Niv. 3) + les pièces détachées correspondantes en stock.
+- **Personnel & Trombinoscope :**
+  - **2 conducteurs** par engin roulant (`Forage`, `Levage`, `Décapage`, `Excavation`, `Transport`, `Chargement`) ; **1 mécanicien** par installation fixe (`Trémie`, `Convoyeur`, `Traitement`, `Lavage`) + **1 mécanicien d'atelier** pour 3 engins roulants ; **1 chef d'équipe** pour 8 ouvriers.
+  - **6 Directeurs :** `DAF` (-2% redevance vente or, -1% taux emprunt), `GEOLOGUE` (-30% carottage), `METALLURGISTE` (+10% or), `MAINTENANCE` (-25% usure), `HSE` (-50% incidents), `RSE` (+2 pts marketing/j) + **+15% synergie** si 6/6.
+- **Banques, Emprunts & Épargne (V1.3.5) :**
+  - Patrimoine Net = `Trésorerie + (Stock Or × Cours) + Valeur Flotte Net (prix neuf × (1 - usure%))`.
+  - Plafond d'emprunt = `33%` du patrimoine net (`ratioEndettementMax`), nombre de prêts illimité dans cette limite. Remboursement quotidien automatique ou anticipé.
+  - Épargne bloquée : `7 jours` (`+3%`) ou `14 jours` (`+7%`).
+
+---
+
+## 3. Feuille de route / État d'avancement
+- [x] **Architecture 100 % autonome & BDD stricte (`v1.3.5`).**
+- [x] **Forage 10–60m, Décapage, Chaîne 7 Étapes & Grues Niv. 1–3 (`v1.3.5`) :** 30 équipements (10 familles × 3 gabarits), 10 concessionnaires de pièces, variateur `t/h`.
+- [x] **Module RH & Trombinoscope (`v1.3.5`).**
+- [x] **Module Banques, Emprunts 33% Patrimoine Net & Épargne Bloquée (`v1.3.5`).**
+- [x] **Interface QG & Admin Unifié (`v1.3.5`) :** Bulle toast haut gauche, détail extraction orpaillage, ventilation cliquable des frais, comparaison version serveur vs GitHub, catalogues unifiés dans `/admin/catalog.html`.
+- [ ] **Module R&D / Laboratoire d'Innovations :** Technologies déblocables (rendement lavage, réduction carburant, détection filons profonds).
+- [ ] **Logistique & Raffinage avancé :** Transport sécurisé des lingots, assurances convoi.
+- [ ] **Activation des e-mails réels (Brevo) :** Renseigner `BREVO_API_KEY` et `BREVO_SENDER_EMAIL` sur Render.

@@ -261,6 +261,21 @@ async function initDB() {
         if (parseInt(checkSettings.rows.at(0).count) === 0) {
             throw new Error('Base de données non configurée : table game_settings vide.');
         }
+        
+        // 15. Carnet d'Ordres de Vente d'Or (résolu toutes les 4h au prorata)
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS market_sell_orders (
+                id SERIAL PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+                client_id INTEGER REFERENCES market_clients(id) ON DELETE CASCADE,
+                client_nom VARCHAR(100) NOT NULL,
+                quantite_grammes NUMERIC NOT NULL,
+                prix_unitaire NUMERIC NOT NULL,
+                marge_demandee NUMERIC NOT NULL,
+                statut VARCHAR(20) DEFAULT 'EN_ATTENTE',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
 
         await client.query('COMMIT');
         console.log('✅ Structure PostgreSQL propre initialisée avec succès.');

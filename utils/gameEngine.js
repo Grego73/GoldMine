@@ -11,6 +11,103 @@ function tirerClientPondere(catalogue) {
     }
     return catalogue.at(0);
 }
+async function resoudreCarnetOrdres4h(clientDb, cfg) {
+    const ordersRes = await clientDb.query(`
+        SELECT o.*, u.username, m.marketing_points, m.cadres,
+               c.demande_grammes, c.marge_acceptee_max
+        FROM market_sell_orders o
+        JOIN users u ON u.id = o.user_id
+        JOIN mines m ON m.user_id = o.user_id
+        LEFT JOIN market_clients c ON c.id = o.client_id
+        WHERE o.statut = 'EN_ATTENTE'
+        FOR UPDATE OF o, m
+    `);
+    if (ordersRes.rows.length === 0) return;
+
+    const rankRes = await clientDb.query(`SELECT COALESCE(AVG(marketing_points), 10) AS moy FROM mines`);
+    const moyMkt = parseFloat(rankRes.rows.at(0).moy) || 10;
+    const taxeBase = parseFloat(cfg.taxeMiniere) || 0.08;
+
+    // Regrouper les offres par client_id
+    const parClient = {};
+    for (const o of ordersRes.rows) {
+        const cid = o.client_id || 0;
+        if (!parClient[cid]) parClient[cid] = [];
+        parClient[cid].push(o);
+    }
+
+    for (const cid of Object.keys(parClient)) {
+        const offres = parClient[cid];
+        const demandeClient = parseFloat(offres.at(0).demande_grammes) || 0;
+        const margeClientBase = parseFloat(offres.at(0).marge_acceptee_max) || 0;
+
+        const valides = [];
+        for (const o of offres) {
+            const qte = parseFloat(o.quantite_grammes) || 0;
+            const marge = parseFloat(o.marge_demandee) || 0;
+            const myMkt = parseFloat(o.marketing_points) || 10;
+            const avantageMkt = Math.max(-0.03, Math.min(0.05, ((myMkt - moyMkt) / Math.max(10, moyMkt)) * 0.03));
+            const toleranceReelle = margeClientBase + avantageMkt;
+
+            if (demandeClient <= 0 || marge > toleranceReelle) {
+                // Offre trop chère : refusée à la clôture, -1 pt marketing et or restitué
+                const newMkt = Math.max(1, +(myMkt - 1).toFixed(1));
+                await clientDb.query('UPDATE mines SET stock_or = stock_or + $1, marketing_points = $2 WHERE user_id = $3', [qte, newMkt, o.user_id]);
+                await clientDb.query(`DELETE FROM market_sell_orders WHERE id = $1`, [o.id]);
+                await clientDb.query(
+                    `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+                    [o.user_id, o.username, `❌ Offre refusée par ${o.client_nom} à la clôture 4h (marge ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}% trop élevée) — ${qte}g restitués.`]
+                );
+            } else {
+                // Score combinant quantité, compétitivité du prix et marketing
+                const score = qte * (1 + myMkt / 50) * Math.max(0.2, 1.2 - marge);
+                valides.push({ ...o, qte, marge, score });
+            }
+        }
+
+        if (valides.length === 0) continue;
+
+        const totalPropose = valides.reduce((acc, v) => acc + v.qte, 0);
+        const totalScore = valides.reduce((acc, v) => acc + v.score, 0) || 1;
+        let resteClient = demandeClient;
+
+        for (let i = 0; i < valides.length; i++) {
+            const v = valides.at(i);
+            let qteVendue = v.qte;
+
+            if (totalPropose > demandeClient) {
+                // Répartition au prorata du score (prix + marketing)
+                qteVendue = i === valides.length - 1
+                    ? Math.min(v.qte, +resteClient.toFixed(1))
+                    : Math.min(v.qte, +((v.score / totalScore) * demandeClient).toFixed(1));
+            }
+            qteVendue = Math.max(0, qteVendue);
+            resteClient = Math.max(0, +(resteClient - qteVendue).toFixed(1));
+            const qteNonVendue = Math.max(0, +(v.qte - qteVendue).toFixed(1));
+
+            if (qteNonVendue > 0) {
+                await clientDb.query('UPDATE mines SET stock_or = stock_or + $1 WHERE user_id = $2', [qteNonVendue, v.user_id]);
+            }
+
+            if (qteVendue > 0) {
+                const prixU = parseFloat(v.prix_unitaire) || 60;
+                const brut = qteVendue * prixU;
+                const hasDAF = Array.isArray(v.cadres) && v.cadres.includes('DAF');
+                const taxe = brut * (hasDAF ? Math.max(0, taxeBase - 0.02) : taxeBase);
+                const net = +(brut - taxe).toFixed(2);
+
+                await clientDb.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [net, v.user_id]);
+                const detailLog = `💰 Vente de ${qteVendue}g à ${v.client_nom} (${prixU} €/g, ${v.marge >= 0 ? '+' : ''}${Math.round(v.marge * 100)}%) -> +${Math.round(net).toLocaleString()} € net${qteNonVendue > 0 ? ` (${qteNonVendue}g restitués au prorata)` : ''}`;
+                await clientDb.query(
+                    `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
+                    [v.user_id, v.username, detailLog]
+                );
+            }
+
+            await clientDb.query(`DELETE FROM market_sell_orders WHERE id = $1`, [v.id]);
+        }
+    }
+}
 
 async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
     const ventesRes = await clientDb.query(`
@@ -149,8 +246,10 @@ async function synchroniserHorlogeServeur() {
         const aucunClient = parseInt(resCountClients.rows.at(0).count) === 0;
 
         if (tempsEcouleMarche >= msCycle || aucunClient) {
+            if (tempsEcouleMarche >= msCycle) await resoudreCarnetOrdres4h(client, cfg);
             const dyn = await calculerDynamiqueMarche4h(client, coursOr, cfg);
             coursOr = dyn.nouveauCours;
+
 
             const heureLabel = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
             historique.push({ label: heureLabel, cours: coursOr });
