@@ -165,17 +165,16 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
 }
 
 async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
-    const resCat = await clientDb.query('SELECT * FROM clients_catalog WHERE actif = TRUE');
+    const resCat = await clientDb.query('SELECT * FROM clients_catalog WHERE actif = TRUE ORDER BY id ASC');
     if (resCat.rows.length === 0) return;
 
-    await clientDb.query('DELETE FROM market_clients');
-
-    const nbClients = Math.max(1, Math.round(cfg.nbClientsMarche || 6));
     const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
     const expiresAt = new Date(Date.now() + heuresCycle * 3600 * 1000);
 
-    for (let i = 0; i < nbClients; i++) {
-        const modele = tirerClientPondere(resCat.rows);
+    // Supprimer uniquement les clients qui auraient été retirés du catalogue Admin
+    await clientDb.query(`DELETE FROM market_clients WHERE nom NOT IN (SELECT nom FROM clients_catalog WHERE actif = TRUE)`);
+
+    for (const modele of resCat.rows) {
         const minGr = parseFloat(modele.min_gr) * multDemande;
         const maxGr = parseFloat(modele.max_gr) * multDemande;
         const demande = Math.round(minGr + Math.random() * (maxGr - minGr));
@@ -184,14 +183,23 @@ async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
         const bMax = parseFloat(modele.bonus_max);
         const bonusPrix = bMin + Math.random() * (bMax - bMin);
         const prixBase = +(coursOr * (1 + bonusPrix)).toFixed(2);
-
         const margeMax = +(Math.random() * (cfg.margeNegociationMax || 0.15)).toFixed(3);
 
-        await clientDb.query(
-            `INSERT INTO market_clients (nom, type_client, secteur, demande_grammes, prix_base_gramme, marge_acceptee_max, expires_at)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-            [modele.nom, modele.type_client, modele.secteur, demande, prixBase, margeMax, expiresAt]
-        );
+        const existRes = await clientDb.query('SELECT id FROM market_clients WHERE nom = $1', [modele.nom]);
+        if (existRes.rows.length > 0) {
+            await clientDb.query(
+                `UPDATE market_clients
+                 SET type_client = $1, secteur = $2, demande_grammes = $3, prix_base_gramme = $4, marge_acceptee_max = $5, expires_at = $6
+                 WHERE id = $7`,
+                [modele.type_client, modele.secteur, demande, prixBase, margeMax, expiresAt, existRes.rows.at(0).id]
+            );
+        } else {
+            await clientDb.query(
+                `INSERT INTO market_clients (nom, type_client, secteur, demande_grammes, prix_base_gramme, marge_acceptee_max, expires_at)
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+                [modele.nom, modele.type_client, modele.secteur, demande, prixBase, margeMax, expiresAt]
+            );
+        }
     }
 }
 
@@ -243,9 +251,10 @@ async function synchroniserHorlogeServeur() {
         const tempsEcouleMarche = Date.now() - baseTickMarche;
 
         const resCountClients = await client.query('SELECT COUNT(*) FROM market_clients');
-        const aucunClient = parseInt(resCountClients.rows.at(0).count) === 0;
+        const resCountCat = await client.query('SELECT COUNT(*) FROM clients_catalog WHERE actif = TRUE');
+        const desyncClients = parseInt(resCountClients.rows.at(0).count) !== parseInt(resCountCat.rows.at(0).count);
 
-        if (tempsEcouleMarche >= msCycle || aucunClient) {
+        if (tempsEcouleMarche >= msCycle || desyncClients) {
             if (tempsEcouleMarche >= msCycle) await resoudreCarnetOrdres4h(client, cfg);
             const dyn = await calculerDynamiqueMarche4h(client, coursOr, cfg);
             coursOr = dyn.nouveauCours;
