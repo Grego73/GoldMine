@@ -125,10 +125,15 @@ function rendreMaFlotte() {
             const nivGrue = gab === 'Petit' ? 1 : gab === 'Géant' ? 3 : 2;
             const infoGrue = isGrue ? '' : ` + Grue Niv.${nivGrue}`;
 
+            const pIdx = parseInt(f.parcelle_index);
+            const nomSecteur = pIdx < 0
+                ? '🅿️ Au dépôt'
+                : `🗺️ ${(typeof parcelles !== 'undefined' && Array.isArray(parcelles) && parcelles.at(pIdx)?.nom) || ('Secteur ' + String.fromCharCode(65 + (isNaN(pIdx) ? 0 : pIdx)))}`;
+
             const badgeStatut = f.statut === 'ACTIF'
-                ? '<span class="ui green label">En service</span>'
+                ? `<span class="ui ${pIdx < 0 ? 'grey' : 'green'} label">${nomSecteur}</span>`
                 : f.statut === 'EN_PANNE'
-                ? '<span class="ui red label">🚨 EN PANNE</span>'
+                ? `<span class="ui red label">🚨 EN PANNE (${nomSecteur})</span>`
                 : f.statut === 'EN_VENTE'
                 ? '<span class="ui orange label">En vente / Enchère</span>'
                 : f.statut === 'OFFRE_LOC'
@@ -136,6 +141,7 @@ function rendreMaFlotte() {
                 : '<span class="ui yellow label">Loué à un PDG</span>';
 
             let actions = '<span style="color:#a8a29e;font-size:0.85em;">Indisponible (contrat en cours)</span>';
+
             if (f.statut === 'EN_PANNE') {
                 actions = `<button class="ui mini red button" onclick="reparerPanne(${f.id})">🚨 Réparer (${nbPieces} pièce(s) ${f.categorie} ${gab}${infoGrue})</button>`;
             } else if (f.statut === 'OFFRE_LOC') {
@@ -170,15 +176,22 @@ function rendreMaFlotte() {
         if (mesLocationsFiltrees.length === 0) {
             locTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a8a29e;">Aucune location en cours pour ce filtre.</td></tr>';
         } else {
-            locTbody.innerHTML = mesLocationsFiltrees.map(r => `
+            locTbody.innerHTML = mesLocationsFiltrees.map(r => {
+                const rIdx = parseInt(r.parcelle_index);
+                const rLieu = rIdx < 0
+                    ? '🅿️ Au dépôt'
+                    : `🗺️ ${(typeof parcelles !== 'undefined' && Array.isArray(parcelles) && parcelles.at(rIdx)?.nom) || ('Secteur ' + String.fromCharCode(65 + (isNaN(rIdx) ? 0 : rIdx)))}`;
+                return `
                 <tr>
                     <td><strong>${r.nom}</strong> (${r.source_type === 'OFFICIEL' ? 'Parc Officiel' : 'PDG ' + r.owner_name})</td>
                     <td><strong>${r.vitesse_min_th}-${r.vitesse_max_th} t/h</strong></td>
                     <td>${r.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(r.loyer_jour).toLocaleString()} €/j</td>
-                    <td><span class="ui blue label">${r.jours_restants} jour(s) restant(s)</span></td>
+                    <td><span class="ui blue label">${rLieu} • ${r.jours_restants}j restants</span></td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
+
         }
     }
 }

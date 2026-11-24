@@ -130,12 +130,12 @@
     <div id="tab-materiel" class="tab-section" style="display:none;">
         <div class="ui segment mine-card">
             <h3 class="ui dividing header mine-header">🚜 Parc Matériel, Brocante & Location</h3>
-            <div style="display:flex; flex-wrap:wrap; gap:10px; margin-bottom:20px;">
-                <button class="ui yellow button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-flotte', this)">🛠️ Ma Flotte & Contrats</button>
-                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-boutique', this)">🏪 Boutique Neuf (0% Usure)</button>
-                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-concession', this)">🏢 Concessionnaires & Pièces</button>
-                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-brocante', this)">🔨 Brocante & Enchères</button>
-                <button class="ui button eq-subnav-btn" onclick="afficherSousOngletMateriel('sub-location', this)">🤝 Location d'Engins</button>
+            <div style="display:grid; grid-template-columns:repeat(5, 1fr); gap:8px; margin-bottom:20px; background:#1c1917; padding:8px; border-radius:8px; border:1px solid #44403c;">
+                <button class="ui small yellow button eq-subnav-btn" style="width:100%; margin:0;" onclick="afficherSousOngletMateriel('sub-flotte', this)">🛠️ Ma Flotte & Contrats</button>
+                <button class="ui small button eq-subnav-btn" style="width:100%; margin:0;" onclick="afficherSousOngletMateriel('sub-boutique', this)">🏪 Boutique Neuf</button>
+                <button class="ui small button eq-subnav-btn" style="width:100%; margin:0;" onclick="afficherSousOngletMateriel('sub-concession', this)">🏢 Concessionnaires</button>
+                <button class="ui small button eq-subnav-btn" style="width:100%; margin:0;" onclick="afficherSousOngletMateriel('sub-brocante', this)">🔨 Brocante & Enchères</button>
+                <button class="ui small button eq-subnav-btn" style="width:100%; margin:0;" onclick="afficherSousOngletMateriel('sub-location', this)">🤝 Location d'Engins</button>
             </div>
 
 
