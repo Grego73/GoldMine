@@ -389,11 +389,12 @@ function afficherTutoriel() {
             onglet: 'marche'
         },
         {
-            titre: 'Première vente d’or',
-            desc: 'Vendez votre stock d’or à un acheteur international dans Bourse & Clients.',
-            pret: Array.isArray(logs) && logs.some(l => (l.details || '').includes('Vente de ')),
+            titre: 'Première offre de vente d’or',
+            desc: 'Déposez une offre de vente à un acheteur international dans Bourse & Clients.',
+            pret: (Array.isArray(etat.pendingOrders) && etat.pendingOrders.length > 0) || (Array.isArray(logs) && logs.some(l => (l.details || '').includes('Vente de ') || (l.details || '').includes('Offre de vente déposée'))),
             onglet: 'marche'
         }
+
     ];
 
     const m = missions.at(step - 1);
@@ -608,12 +609,14 @@ function dessinerClientsMarche() {
                 <td>
                     <div class="ui action input" style="min-width: 140px;">
                         <input type="number" id="qte-client-${c.id}" min="1" max="${maxVendable}" value="${maxVendable > 0 ? maxVendable : ''}" placeholder="g">
-                        <button class="ui yellow mini button" onclick="vendreAuClient(${c.id})" ${maxVendable <= 0 ? 'disabled' : ''}>Vendre</button>
+                        <button class="ui yellow mini button" onclick="vendreAuClient(${c.id})" ${maxVendable <= 0 ? 'disabled' : ''}>📋 Offrir</button>
                     </div>
                 </td>
             </tr>
         `;
     }).join('');
+    dessinerOffresEnAttente();
+
 }
 
 async function actionMine(type, payload = null) {
@@ -644,6 +647,39 @@ async function vendreAuClient(clientId) {
     const data = await res.json();
     afficherToast(data.message || data.error, !data.success);
     await chargerEtatJeu();
+}
+
+function dessinerOffresEnAttente() {
+    const tbody = document.getElementById('pending-orders-list');
+    if (!tbody) return;
+    const orders = Array.isArray(etat.pendingOrders) ? etat.pendingOrders : [];
+    if (orders.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#a8a29e;">Aucune offre de vente en attente pour le prochain cycle de 4h.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = orders.map(o => {
+        const mPct = Math.round((parseFloat(o.marge_demandee) || 0) * 100);
+        return `
+            <tr>
+                <td><strong>${o.client_nom}</strong></td>
+                <td class="gold-text"><strong>${parseFloat(o.quantite_grammes).toLocaleString()} g</strong></td>
+                <td>${parseFloat(o.prix_unitaire).toFixed(2)} €/g</td>
+                <td>${mPct >= 0 ? '+' : ''}${mPct}%</td>
+                <td><button class="ui mini red button" onclick="annulerOffreVente(${o.id})">↩️ Annuler</button></td>
+            </tr>
+        `;
+    }).join('');
+}
+
+async function annulerOffreVente(orderId) {
+    const res = await fetch('/api/game/cancel-order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ orderId })
+    });
+    const data = await res.json();
+    afficherToast(data.message || data.error, !data.success);
+    if (data.success) await chargerEtatJeu();
 }
 
 function afficherModaleEvenement(ev) {
