@@ -3,9 +3,9 @@ let etat = {};
 let market = {};
 let parcelles = [];
 
-// 1. GRAPHIQUE MAISON 100 % NATIF
-function dessinerGraphiqueCours(historique) {
-    const canvas = document.getElementById('chartCoursOr');
+// 1. GRAPHIQUE MAISON 100 % NATIF (OR & CARBURANT)
+function dessinerGraphiqueCours(historique, canvasId = 'chartCoursOr', couleur = '#fbbf24') {
+    const canvas = document.getElementById(canvasId);
     if (!canvas || !historique || historique.length === 0) return;
 
     const ctx = canvas.getContext('2d');
@@ -40,14 +40,14 @@ function dessinerGraphiqueCours(historique) {
 
     ctx.beginPath();
     pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
-    ctx.strokeStyle = '#fbbf24';
+    ctx.strokeStyle = couleur;
     ctx.lineWidth = 2;
     ctx.stroke();
 
     pts.forEach((p, i) => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
-        ctx.fillStyle = '#fbbf24';
+        ctx.fillStyle = couleur;
         ctx.fill();
         if (i === 0 || i === pts.length - 1 || pts.length <= 8) {
             ctx.fillStyle = '#a8a29e';
@@ -136,7 +136,11 @@ async function chargerEtatJeu() {
         if (selectCadence) selectCadence.value = String(etat.cadence);
 
         majAffichage(data.logs);
-        dessinerGraphiqueCours(market.historique);
+        dessinerGraphiqueCours(market.historique, 'chartCoursOr', '#fbbf24');
+        const histCarb = (Array.isArray(market.historiqueCarburant) && market.historiqueCarburant.length > 0)
+            ? market.historiqueCarburant
+            : [{ label: 'Actuel', cours: parseFloat(market.coursCarburant) || 1.85 }];
+        dessinerGraphiqueCours(histCarb, 'chartCoursCarburant', '#38bdf8');
 
         if (etat.pendingEvent) {
             afficherModaleEvenement(etat.pendingEvent);
@@ -153,6 +157,19 @@ function majAffichage(logs = null) {
     document.getElementById('stat-argent').innerText = Math.round(etat.argent).toLocaleString() + ' €';
     document.getElementById('stat-stock').innerText = Math.round(etat.stockOr).toLocaleString() + ' g';
     document.getElementById('stat-cours').innerText = market.coursOr.toFixed(2) + ' €/g';
+    const coursCarb = parseFloat(market.coursCarburant) || parseFloat(CONFIG.coursCarburantInitial) || 1.85;
+    const carbRef = parseFloat(CONFIG.coursCarburantInitial) || 1.85;
+    const diffCarbPct = Math.round(((coursCarb - carbRef) / carbRef) * 100);
+    const elStatCarb = document.getElementById('stat-carburant');
+    if (elStatCarb) elStatCarb.innerText = `${coursCarb.toFixed(2)} €/L`;
+    const elBourseCarb = document.getElementById('bourse-carburant-val');
+    if (elBourseCarb) elBourseCarb.innerText = `${coursCarb.toFixed(2)} €/L`;
+    const elImpactCarb = document.getElementById('bourse-carburant-impact');
+    if (elImpactCarb) {
+        const signe = diffCarbPct > 0 ? '+' : '';
+        const col = diffCarbPct > 0 ? '#f87171' : (diffCarbPct < 0 ? '#34d399' : '#38bdf8');
+        elImpactCarb.innerHTML = `Variation vs base (${carbRef.toFixed(2)} €/L) : <strong style="color:${col};">${signe}${diffCarbPct}%</strong> sur la facture carburant.`;
+    }
     document.getElementById('stat-mkt').innerText = Math.round(etat.marketingPoints) + ' pts';
 
     document.getElementById('kpi-reserve').innerText = Math.round(pActive.reserveReelle).toLocaleString() + ' t';
@@ -317,7 +334,9 @@ function rendreDetailFrais() {
         const ratioVit = Math.max(0.1, vReg / vMax);
 
         if (ratio > 0) {
-            carburantJ += (parseFloat(item.carburant_jour) || 0) * ratioVit * ratio;
+            const cAct = parseFloat(market.coursCarburant) || parseFloat(CONFIG.coursCarburantInitial) || 1.85;
+            const cInit = parseFloat(CONFIG.coursCarburantInitial) || 1.85;
+            carburantJ += (parseFloat(item.carburant_jour) || 0) * ratioVit * ratio * (cAct / cInit);
         }
         if (item._kind === 'RENTAL') {
             loyersJ += (parseFloat(item.loyer_jour) || 0);
@@ -729,6 +748,58 @@ async function annulerOffreVente(orderId) {
     if (data.success) await chargerEtatJeu();
 }
 
+async function chargerHistoriqueVentes() {
+    const tbody = document.getElementById('sales-history-list');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#a8a29e;">Chargement de l’historique...</td></tr>';
+
+    const res = await fetch('/api/game/sales-logs');
+    if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#f87171;">Erreur de chargement.</td></tr>';
+        return;
+    }
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; color:#a8a29e;">Aucune vente ou refus enregistré pour le moment.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = rows.map(r => {
+        const dt = new Date(r.resolved_at || r.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const qteOffre = parseFloat(r.quantite_grammes) || 0;
+        const qteVendue = parseFloat(r.quantite_vendue) || 0;
+        const prixU = parseFloat(r.prix_unitaire) || 0;
+        const mPct = Math.round((parseFloat(r.marge_demandee) || 0) * 100);
+        const net = parseFloat(r.montant_net) || 0;
+        const st = (r.statut || '').toUpperCase();
+
+        let badge = `<span class="ui label">${st}</span>`;
+        if (st === 'VENDU' || st === 'PARTIEL') {
+            badge = `<span class="ui green label">${st === 'PARTIEL' ? '⚠️ Partiel' : '✅ Vendu'}</span>`;
+        } else if (st === 'REFUSE') {
+            badge = `<span class="ui red label">❌ Refusé</span>`;
+        } else if (st === 'EN_ATTENTE') {
+            badge = `<span class="ui yellow label">⏳ En attente</span>`;
+        }
+
+
+        const resumeGain = net > 0
+            ? `<strong class="money-text">+${Math.round(net).toLocaleString()} €</strong> (${qteVendue.toLocaleString()} g)`
+            : `<span style="color:#a8a29e;">0 € (${qteVendue.toLocaleString()} g)</span>`;
+
+        return `
+            <tr>
+                <td style="color:#a8a29e; font-size:0.88em;">${dt}</td>
+                <td><strong>${r.client_nom}</strong></td>
+                <td class="gold-text">${qteOffre.toLocaleString()} g</td>
+                <td>${prixU.toFixed(2)} €/g (${mPct >= 0 ? '+' : ''}${mPct}%)</td>
+                <td>${resumeGain}</td>
+                <td>${badge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
 function afficherModaleEvenement(ev) {
     const modal = document.getElementById('eventModal');
     document.getElementById('eventTitle').innerText = '⚠️ ' + ev.titre;
@@ -759,7 +830,9 @@ function changerOnglet(nomOnglet, elMenu) {
     document.getElementById('tab-' + nomOnglet).style.display = 'block';
     document.querySelectorAll('.mine-nav .item').forEach(el => el.classList.remove('active'));
     elMenu.classList.add('active');
+    if (nomOnglet === 'marche') chargerHistoriqueVentes();
 }
+
 
 async function chargerClassement() {
     const res = await fetch('/api/game/ranking');

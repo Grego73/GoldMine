@@ -300,6 +300,23 @@ router.get('/logs', requireAdmin, async (req, res) => {
     res.json(result.rows);
 });
 
+// 6B. RÉCAPITULATIF COMPLET DES VENTES D'OR (EN ATTENTE, VENDUES, PARTIELLES, REFUSÉES)
+router.get('/sales-recap', requireAdmin, async (req, res) => {
+    try {
+        const ordersRes = await pool.query(`
+            SELECT o.*, u.username
+            FROM market_sell_orders o
+            JOIN users u ON u.id = o.user_id
+            ORDER BY COALESCE(o.resolved_at, o.created_at) DESC
+            LIMIT 200
+        `);
+        res.json(ordersRes.rows);
+    } catch (err) {
+        console.error('Erreur admin /sales-recap :', err);
+        res.status(500).json({ error: 'Erreur lecture récapitulatif des ventes' });
+    }
+});
+
 // 7. VÉRIFICATION DE VERSION (SERVEUR ACTIF VS DERNIER COMMIT GITHUB)
 router.get('/version', requireAdmin, async (req, res) => {
     try {

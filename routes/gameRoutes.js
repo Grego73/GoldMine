@@ -160,6 +160,8 @@ router.get('/state', requireAuth, async (req, res) => {
             market: {
                 coursOr: parseFloat(mkt.cours_or),
                 historique: mkt.historique_cours,
+                coursCarburant: parseFloat(mkt.cours_carburant) || parseFloat(cfg.coursCarburantInitial) || 1.85,
+                historiqueCarburant: Array.isArray(mkt.historique_carburant) ? mkt.historique_carburant : [],
                 lastMarketTick: mkt.last_market_tick,
                 moyenneMarketingSecteur: +moyMkt.toFixed(1),
                 leaderMarketingSecteur: +maxMkt.toFixed(1),
@@ -664,6 +666,24 @@ router.post('/claim-tutorial', requireAuth, async (req, res) => {
         client.release();
     }
 });
+// 7. HISTORIQUE DES OFFRES DE VENTE & REFUS CLIENTS (PDG)
+router.get('/sales-logs', requireAuth, async (req, res) => {
+    try {
+        const resOrders = await pool.query(`
+            SELECT id, client_nom, quantite_grammes, quantite_vendue, prix_unitaire,
+                   marge_demandee, montant_net, statut, created_at, resolved_at
+            FROM market_sell_orders
+            WHERE user_id = $1
+            ORDER BY COALESCE(resolved_at, created_at) DESC
+            LIMIT 100
+        `, [req.session.userId]);
+        res.json(resOrders.rows);
+    } catch (err) {
+        console.error('Erreur GET /sales-logs :', err);
+        res.status(500).json({ error: 'Erreur chargement historique des ventes' });
+    }
+});
+
 
 module.exports = router;
 

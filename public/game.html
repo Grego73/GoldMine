@@ -36,7 +36,8 @@
         <span class="status-item">💶 Trésorerie : <span id="stat-argent" class="money-text">0 €</span></span>
         <span class="status-item">🪙 Stock Or : <span id="stat-stock" class="gold-text">0 g</span></span>
         <span>| Collecte du jour : <strong id="stat-or-jour" style="color:#34d399;">+0 g</strong></span>
-        <span class="status-item">📊 Cours : <span id="stat-cours" class="gold-text">60.00 €/g</span></span>
+        <span class="status-item">📊 Or : <span id="stat-cours" class="gold-text">60.00 €/g</span></span>
+        <span class="status-item">⛽ Carburant : <strong id="stat-carburant" style="color:#38bdf8;">1.85 €/L</strong></span>
         <span class="status-item">📣 Notoriété : <strong id="stat-mkt" style="color:#fbbf24;">10 pts</strong></span>
     </div>
 </div>
@@ -243,7 +244,7 @@
     </div>
 
     <div id="tab-marche" class="tab-section" style="display:none;">
-        <div class="ui two column grid">
+        <div class="ui three column grid">
             <div class="ui segment mine-card">
                 <h3 class="ui dividing header mine-header">📈 Cours Mondial de l'Or</h3>
                 <canvas id="chartCoursOr" height="140" style="width:100%; background:#141210; border-radius:8px; border:1px solid #44403c;"></canvas>
@@ -251,6 +252,12 @@
                     <span id="countdown-marche" style="color:#fbbf24; font-weight:bold;">Renouvellement dans --h--</span>
                     <button id="btn-marketing" class="ui orange button" onclick="actionMine('marketing')">Campagne Marketing</button>
                 </div>
+            </div>
+
+            <div class="ui segment mine-card">
+                <h3 class="ui dividing header mine-header">⛽ Cours du Carburant (<span id="bourse-carburant-val" style="color:#38bdf8;">1.85 €/L</span>)</h3>
+                <canvas id="chartCoursCarburant" height="140" style="width:100%; background:#141210; border-radius:8px; border:1px solid #44403c;"></canvas>
+                <p id="bourse-carburant-impact" style="margin-top:12px; font-size:0.88em; color:#d6d3d1;">Impact sur vos dépenses de carburant en temps réel.</p>
             </div>
 
             <div class="ui segment mine-card">
@@ -289,7 +296,25 @@
                     <tbody id="pending-orders-list"></tbody>
                 </table>
             </div>
-
+            <div style="margin-top:18px; padding-top:12px; border-top:1px solid #44403c;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <h4 style="color:#fbbf24; margin:0;">📜 Historique des Ventes & Refus Clients</h4>
+                    <button class="ui mini button" onclick="chargerHistoriqueVentes()">🔄 Actualiser</button>
+                </div>
+                <table class="ui table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Client</th>
+                            <th>Offre (g)</th>
+                            <th>Prix / Marge</th>
+                            <th>Vendu / Net</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sales-history-list"></tbody>
+                </table>
+            </div>
         </div>
     </div>
     <!-- ONGLET BANQUES, EMPRUNTS & ÉPARGNE -->

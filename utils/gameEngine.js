@@ -53,7 +53,7 @@ async function resoudreCarnetOrdres4h(clientDb, cfg) {
                 // Offre trop chère : refusée à la clôture, -1 pt marketing et or restitué
                 const newMkt = Math.max(1, +(myMkt - 1).toFixed(1));
                 await clientDb.query('UPDATE mines SET stock_or = stock_or + $1, marketing_points = $2 WHERE user_id = $3', [qte, newMkt, o.user_id]);
-                await clientDb.query(`DELETE FROM market_sell_orders WHERE id = $1`, [o.id]);
+                await clientDb.query(`UPDATE market_sell_orders SET statut = 'REFUSE', quantite_vendue = 0, montant_net = 0, resolved_at = NOW() WHERE id = $1`, [o.id]);
                 await clientDb.query(
                     `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'FINANCE', $3)`,
                     [o.user_id, o.username, `❌ Offre refusée par ${o.client_nom} à la clôture 4h (marge ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}% trop élevée) — ${qte}g restitués.`]
@@ -89,12 +89,13 @@ async function resoudreCarnetOrdres4h(clientDb, cfg) {
                 await clientDb.query('UPDATE mines SET stock_or = stock_or + $1 WHERE user_id = $2', [qteNonVendue, v.user_id]);
             }
 
+            let net = 0;
             if (qteVendue > 0) {
                 const prixU = parseFloat(v.prix_unitaire) || 60;
                 const brut = qteVendue * prixU;
                 const hasDAF = Array.isArray(v.cadres) && v.cadres.includes('DAF');
                 const taxe = brut * (hasDAF ? Math.max(0, taxeBase - 0.02) : taxeBase);
-                const net = +(brut - taxe).toFixed(2);
+                net = +(brut - taxe).toFixed(2);
 
                 await clientDb.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [net, v.user_id]);
                 const detailLog = `💰 Vente de ${qteVendue}g à ${v.client_nom} (${prixU} €/g, ${v.marge >= 0 ? '+' : ''}${Math.round(v.marge * 100)}%) -> +${Math.round(net).toLocaleString()} € net${qteNonVendue > 0 ? ` (${qteNonVendue}g restitués au prorata)` : ''}`;
@@ -104,18 +105,27 @@ async function resoudreCarnetOrdres4h(clientDb, cfg) {
                 );
             }
 
-            await clientDb.query(`DELETE FROM market_sell_orders WHERE id = $1`, [v.id]);
+            const statutFinal = qteVendue <= 0 ? 'REFUSE' : (qteNonVendue > 0 ? 'PARTIEL' : 'VENDU');
+            await clientDb.query(
+                `UPDATE market_sell_orders SET statut = $1, quantite_vendue = $2, montant_net = $3, resolved_at = NOW() WHERE id = $4`,
+                [statutFinal, qteVendue, net, v.id]
+            );
         }
     }
 }
 
-async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
+async function calculerDynamiqueMarche4h(clientDb, coursActuel, coursCarburantActuel, cfg) {
+     heuresCycle = parseInt(cfg.cycleMarcheHeures, 10);
+    if (!Number.isFinite(heuresCycle) || heuresCycle <= 0) {
+        throw new Error('Variable BDD manquante ou invalide : cycleMarcheHeures');
+    }
+    const heuresCycle = Math.max(1, parseInt(cfg.cycleMarcheHeures) || 4);
     const ventesRes = await clientDb.query(`
         SELECT details FROM player_logs
         WHERE category = 'FINANCE'
           AND details LIKE '💰 Vente de %'
-          AND created_at >= NOW() - INTERVAL '4 hours'
-    `);
+          AND created_at >= NOW() - ($1 || ' hours')::INTERVAL
+    `, [heuresCycle]);
     let orVendu4h = 0;
     for (const row of ventesRes.rows) {
         const match = row.details.match(/Vente de\s+(\d+(?:\.\d+)?)g/i);
@@ -126,8 +136,8 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
         SELECT details FROM player_logs
         WHERE category = 'MINE'
           AND details LIKE '%Extraction horaire%'
-          AND created_at >= NOW() - INTERVAL '4 hours'
-    `);
+          AND created_at >= NOW() - ($1 || ' hours')::INTERVAL
+    `, [heuresCycle]);
     let orProduit4h = 0;
     for (const row of prodRes.rows) {
         const match = row.details.match(/\+(\d+(?:\.\d+)?)g d'or/i);
@@ -137,8 +147,8 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
     const achatsRes = await clientDb.query(`
         SELECT COUNT(*) AS nb FROM player_logs
         WHERE category IN ('MATERIEL', 'PROSPECTION')
-          AND created_at >= NOW() - INTERVAL '4 hours'
-    `);
+          AND created_at >= NOW() - ($1 || ' hours')::INTERVAL
+    `, [heuresCycle]);
     const nbAchats4h = parseInt(achatsRes.rows.at(0).nb) || 0;
 
     const stocksRes = await clientDb.query(`
@@ -161,8 +171,14 @@ async function calculerDynamiqueMarche4h(clientDb, coursActuel, cfg) {
 
     const multDemande = Math.max(1.0, Math.min(4.0, 1 + (moyStock / 2500)));
 
-    return { nouveauCours, multDemande };
+    const carbMin = parseFloat(cfg.coursCarburantMin) || 1.10;
+    const carbMax = parseFloat(cfg.coursCarburantMax) || 3.20;
+    const varCarb = (Math.random() * 0.08) - 0.038 + Math.min(0.02, nbAchats4h * 0.002);
+    const nouveauCoursCarburant = Math.max(carbMin, Math.min(carbMax, +(coursCarburantActuel * (1 + varCarb)).toFixed(2)));
+
+    return { nouveauCours, nouveauCoursCarburant, multDemande };
 }
+
 
 async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
     const resCat = await clientDb.query('SELECT * FROM clients_catalog WHERE actif = TRUE ORDER BY id ASC');
@@ -244,6 +260,8 @@ async function synchroniserHorlogeServeur() {
         const mkt = resMkt.rows.at(0);
         let coursOr = parseFloat(mkt.cours_or);
         let historique = Array.isArray(mkt.historique_cours) ? mkt.historique_cours : [];
+        let coursCarburant = parseFloat(mkt.cours_carburant) || parseFloat(cfg.coursCarburantInitial) || 1.85;
+        let historiqueCarburant = Array.isArray(mkt.historique_carburant) ? mkt.historique_carburant : [];
 
         // A. CYCLE MARCHÉ & PRIX CLIENTS DYNAMIQUES (TOUTES LES 4 HEURES)
         const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
@@ -252,18 +270,25 @@ async function synchroniserHorlogeServeur() {
         const tempsEcouleMarche = Date.now() - baseTickMarche;
 
         const resCountClients = await client.query('SELECT COUNT(*) FROM market_clients');
+        const resExpiredClients = await client.query('SELECT COUNT(*) FROM market_clients WHERE expires_at <= NOW()');
         const resCountCat = await client.query('SELECT COUNT(*) FROM clients_catalog WHERE actif = TRUE');
+        const clientsExpires = parseInt(resExpiredClients.rows.at(0).count) > 0;
         const desyncClients = parseInt(resCountClients.rows.at(0).count) !== parseInt(resCountCat.rows.at(0).count);
 
-        if (tempsEcouleMarche >= msCycle || desyncClients) {
-            if (tempsEcouleMarche >= msCycle) await resoudreCarnetOrdres4h(client, cfg);
-            const dyn = await calculerDynamiqueMarche4h(client, coursOr, cfg);
+        if (tempsEcouleMarche >= msCycle || clientsExpires || desyncClients) {
+            if (tempsEcouleMarche >= msCycle || clientsExpires) {
+                await resoudreCarnetOrdres4h(client, cfg);
+            }
+            const dyn = await calculerDynamiqueMarche4h(client, coursOr, coursCarburant, cfg);
             coursOr = dyn.nouveauCours;
-
+            coursCarburant = dyn.nouveauCoursCarburant;
 
             const heureLabel = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' });
             historique.push({ label: heureLabel, cours: coursOr });
             if (historique.length > 24) historique.shift();
+
+            historiqueCarburant.push({ label: heureLabel, cours: coursCarburant });
+            if (historiqueCarburant.length > 24) historiqueCarburant.shift();
 
             await genererClientsMarche(client, coursOr, cfg, dyn.multDemande);
 
@@ -273,8 +298,8 @@ async function synchroniserHorlogeServeur() {
                 : new Date();
 
             await client.query(
-                `UPDATE market_state SET cours_or = $1, historique_cours = $2, last_market_tick = $3 WHERE id = 1`,
-                [coursOr, JSON.stringify(historique), nouveauTickMarche]
+                `UPDATE market_state SET cours_or = $1, historique_cours = $2, cours_carburant = $3, historique_carburant = $4, last_market_tick = $5 WHERE id = 1`,
+                [coursOr, JSON.stringify(historique), coursCarburant, JSON.stringify(historiqueCarburant), nouveauTickMarche]
             );
         }
 
@@ -292,6 +317,9 @@ async function synchroniserHorlogeServeur() {
                 WHERE u.is_banned = FALSE
                 FOR UPDATE OF m
             `);
+
+            const carbRef = parseFloat(cfg.coursCarburantInitial) || 1.85;
+            const ratioPrixCarburant = carbRef > 0 ? (coursCarburant / carbRef) : 1.0;
 
             for (const mine of resMines.rows) {
                 const parcelles = mine.parcelles;
@@ -527,7 +555,8 @@ async function synchroniserHorlogeServeur() {
                     + (chefsEquipe * cfg.salaireChefJour)
                     + (cadres.length * cfg.salaireCadreJour)) / 24) * heuresEcoulees;
 
-                const fraisHeure = +(salairesHoraires + coutCarburantHoraire + coutLoyersHoraire).toFixed(2);
+                const coutCarburantIndexe = coutCarburantHoraire * ratioPrixCarburant;
+                const fraisHeure = +(salairesHoraires + coutCarburantIndexe + coutLoyersHoraire).toFixed(2);
                 const fraisSemaine = +(parseFloat(mine.frais_semaine_accumules || 0) + fraisHeure).toFixed(2);
 
                 const usureMoyenne = fleetRes.rows.length > 0 ? +(sommeUsure / fleetRes.rows.length).toFixed(1) : 0;

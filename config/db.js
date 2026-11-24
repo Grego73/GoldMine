@@ -64,11 +64,15 @@ async function initDB() {
                 id INTEGER PRIMARY KEY DEFAULT 1,
                 cours_or NUMERIC NOT NULL,
                 historique_cours JSONB DEFAULT '[]',
+                cours_carburant NUMERIC DEFAULT 1.85,
+                historique_carburant JSONB DEFAULT '[]',
                 last_market_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_daily_tick DATE DEFAULT CURRENT_DATE,
                 last_hourly_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 last_weekly_tick TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             );
+            ALTER TABLE market_state ADD COLUMN IF NOT EXISTS cours_carburant NUMERIC DEFAULT 1.85;
+            ALTER TABLE market_state ADD COLUMN IF NOT EXISTS historique_carburant JSONB DEFAULT '[]';
         `);
 
         // 4. Catalogue d'acheteurs (géré en Admin)
@@ -267,14 +271,20 @@ async function initDB() {
             CREATE TABLE IF NOT EXISTS market_sell_orders (
                 id SERIAL PRIMARY KEY,
                 user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-                client_id INTEGER REFERENCES market_clients(id) ON DELETE CASCADE,
+                client_id INTEGER REFERENCES market_clients(id) ON DELETE SET NULL,
                 client_nom VARCHAR(100) NOT NULL,
                 quantite_grammes NUMERIC NOT NULL,
+                quantite_vendue NUMERIC DEFAULT 0,
                 prix_unitaire NUMERIC NOT NULL,
+                montant_net NUMERIC DEFAULT 0,
                 marge_demandee NUMERIC NOT NULL,
                 statut VARCHAR(20) DEFAULT 'EN_ATTENTE',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                resolved_at TIMESTAMP DEFAULT NULL
             );
+            ALTER TABLE market_sell_orders ADD COLUMN IF NOT EXISTS quantite_vendue NUMERIC DEFAULT 0;
+            ALTER TABLE market_sell_orders ADD COLUMN IF NOT EXISTS montant_net NUMERIC DEFAULT 0;
+            ALTER TABLE market_sell_orders ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMP DEFAULT NULL;
         `);
 
         await client.query('COMMIT');

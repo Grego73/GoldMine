@@ -23,6 +23,39 @@
 
 <div class="ui container" style="margin-top: 25px;">
     <div class="ui two column grid">
+        <div class="ui segment mine-card" style="margin-bottom: 20px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+                <h3 class="ui dividing header mine-header" style="margin:0;">💰 Récapitulatif Bourse : Ventes & Refus Clients</h3>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="filter-sales-pdg" placeholder="Filtrer par PDG ou client..." oninput="filtrerVentesAdmin()" style="padding:6px 10px;">
+                    <select id="filter-sales-statut" onchange="filtrerVentesAdmin()" style="padding:6px 10px;">
+                        <option value="">Tous les statuts</option>
+                        <option value="ACCEPTEE">✅ Acceptées / Vendues</option>
+                        <option value="PARTIELLE">⚠️ Partielles</option>
+                        <option value="REFUSEE">❌ Refusées</option>
+                        <option value="EN_ATTENTE">⏳ En attente</option>
+                    </select>
+                    <button class="ui blue mini button" onclick="chargerVentesAdmin()">🔄 Actualiser</button>
+                </div>
+            </div>
+            <div style="max-height:360px; overflow-y:auto;">
+                <table class="ui table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>PDG</th>
+                            <th>Client</th>
+                            <th>Offre (g)</th>
+                            <th>Prix / Marge</th>
+                            <th>Vendu / Net</th>
+                            <th>Statut</th>
+                        </tr>
+                    </thead>
+                    <tbody id="admin-sales-tbody"></tbody>
+                </table>
+            </div>
+        </div>
+
         <div class="ui segment mine-card">
             <h3 class="ui dividing header mine-header">📜 Logs d'Activité Joueurs</h3>
             <div class="ui action input" style="margin-bottom:12px;">
@@ -69,6 +102,70 @@ async function chargerLogsAdmin() {
     }).join('');
 }
 
+let allAdminSales = [];
+
+async function chargerVentesAdmin() {
+    const tbody = document.getElementById('admin-sales-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#a8a29e;">Chargement...</td></tr>';
+
+    const res = await fetch('/api/admin/sales-recap');
+    if (!res.ok) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#f87171;">Erreur de chargement.</td></tr>';
+        return;
+    }
+    allAdminSales = await res.json();
+    filtrerVentesAdmin();
+}
+
+function filtrerVentesAdmin() {
+    const tbody = document.getElementById('admin-sales-tbody');
+    if (!tbody) return;
+    const txt = (document.getElementById('filter-sales-pdg')?.value || '').trim().toLowerCase();
+    const stFiltre = (document.getElementById('filter-sales-statut')?.value || '').toUpperCase();
+
+    const filtered = allAdminSales.filter(r => {
+        const matchTxt = !txt || (r.username || '').toLowerCase().includes(txt) || (r.client_nom || '').toLowerCase().includes(txt);
+        const st = (r.statut || '').toUpperCase();
+        const matchSt = !stFiltre || (stFiltre === 'ACCEPTEE' ? (st === 'ACCEPTEE' || st === 'VENDUE') : st === stFiltre);
+        return matchTxt && matchSt;
+    });
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center; color:#a8a29e;">Aucune transaction trouvée.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(r => {
+        const d = new Date(r.resolved_at || r.created_at).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const qteOffre = parseFloat(r.quantite_grammes) || 0;
+        const qteVendue = parseFloat(r.quantite_vendue) || 0;
+        const prixU = parseFloat(r.prix_unitaire) || 0;
+        const mPct = Math.round((parseFloat(r.marge_demandee) || 0) * 100);
+        const net = parseFloat(r.montant_net) || 0;
+        const st = (r.statut || '').toUpperCase();
+
+        let badge = `<span class="ui label">${st}</span>`;
+        if (st === 'ACCEPTEE' || st === 'VENDUE') badge = '<span class="ui green label">✅ Acceptée</span>';
+        else if (st === 'PARTIELLE') badge = '<span class="ui orange label">⚠️ Partielle</span>';
+        else if (st === 'REFUSEE') badge = '<span class="ui red label">❌ Refusée</span>';
+        else if (st === 'EN_ATTENTE') badge = '<span class="ui yellow label">⏳ En attente</span>';
+
+        return `
+            <tr>
+                <td style="color:#a8a29e; font-size:0.88em;">${d}</td>
+                <td><strong style="color:#fbbf24;">${r.username}</strong></td>
+                <td>${r.client_nom}</td>
+                <td>${qteOffre.toLocaleString()} g</td>
+                <td>${prixU.toFixed(2)} €/g (${mPct >= 0 ? '+' : ''}${mPct}%)</td>
+                <td>${net > 0 ? `<strong style="color:#34d399;">+${Math.round(net).toLocaleString()} €</strong> (${qteVendue.toLocaleString()} g)` : `0 € (${qteVendue.toLocaleString()} g)`}</td>
+                <td>${badge}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+chargerVentesAdmin();
 chargerLogsJoueurs();
 chargerLogsAdmin();
 </script>
