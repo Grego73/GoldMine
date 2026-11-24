@@ -866,7 +866,16 @@ function rendreChantierSecteur(idx) {
             alertEl.innerHTML = `<span class="ui orange label">🚧 Décapage en cours à ${st.debitDecapage} t/h — Temps estimé avant ouverture de la fosse : ${Math.ceil(rest / st.debitDecapage)} heure(s).</span>`;
         }
     } else {
-        document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} | Total terre traitée : ${st.totalTerreTh} t/h | Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(p.reserveReelle).toLocaleString()} t`;
+        const resRestante = Math.max(0, parseFloat(p.reserveReelle) || 0);
+        let tempsFinStr = 'À l’arrêt';
+        if (resRestante <= 0) {
+            tempsFinStr = 'Fosse épuisée';
+        } else if (st.totalTerreTh > 0) {
+            const hRest = Math.ceil(resRestante / st.totalTerreTh);
+            tempsFinStr = hRest >= 24 ? `~${Math.floor(hRest / 24)}j ${hRest % 24}h` : `~${hRest}h`;
+        }
+
+        document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} | Débit : ${st.totalTerreTh} t/h | Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(resRestante).toLocaleString()} t | ⏳ Fin estimée : ${tempsFinStr}`;
 
         const maillons = [
             { key: 'Excavation', nom: '1. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
@@ -904,8 +913,9 @@ function rendreChantierSecteur(idx) {
     }
 
     if (etapeChantierFiltre !== 'TOUTES') {
-        alertEl.innerHTML += `<button class="ui mini yellow button" onclick="filtrerEtapeChantier('TOUTES')">🌐 Voir toutes les étapes (${etapeChantierFiltre})</button>`;
+        alertEl.innerHTML += `<div style="width:100%; margin-top:4px;"><button class="ui mini yellow button" onclick="filtrerEtapeChantier('TOUTES')">🌐 Voir toutes les étapes (${etapeChantierFiltre})</button></div>`;
     }
+
 
 
     const tbody = document.getElementById('sector-assigned-tbody');
@@ -944,18 +954,15 @@ function rendreChantierSecteur(idx) {
 
     const availEl = document.getElementById('sector-available-fleet');
     if (autres.length === 0) {
-        availEl.innerHTML = '<span style="color:#a8a29e; font-size:0.9em;">Tous vos engins actifs sont déjà sur ce secteur.</span>';
+        availEl.innerHTML = `<span style="color:#a8a29e; font-size:0.9em;">Aucun engin disponible au dépôt${etapeChantierFiltre !== 'TOUTES' ? ' pour l’étape ' + etapeChantierFiltre : ''} (désaffectez un engin d’un autre secteur pour le rapatrier au dépôt).</span>`;
     } else {
-        availEl.innerHTML = autres.map(e => {
-            const pIdxE = parseInt(e.parcelle_index);
-            const lieu = pIdxE < 0 ? '🅿️ Au dépôt' : (parcelles.at(pIdxE)?.nom || 'Secteur A');
-            return `
-                <button class="ui mini blue button" onclick="affecterEnginSecteur('${e.targetType}', ${e.id}, ${idx})">
-                    ➕ ${e.nom} (${e.categorie} - ${e.vitesse_reglee_th} t/h) [${lieu}]
-                </button>
-            `;
-        }).join('');
-    }}
+        availEl.innerHTML = autres.map(e => `
+            <button class="ui mini blue button" onclick="affecterEnginSecteur('${e.targetType}', ${e.id}, ${idx})">
+                ➕ ${e.nom} (${e.categorie} - ${e.vitesse_reglee_th} t/h) [🅿️ Au dépôt]
+            </button>
+        `).join('');
+    }
+}
 
 async function reglerVitesseEngin(targetType, targetId, vitesseTh) {
     const res = await fetch('/api/equipment/set-speed', {
