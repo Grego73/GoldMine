@@ -774,7 +774,34 @@ setInterval(() => {
 }, 1000);
 
 let secteurInspecteIdx = 0;
+let etapeChantierFiltre = 'TOUTES';
+
+function filtrerEtapeChantier(etapeKey) {
+    etapeChantierFiltre = (etapeChantierFiltre === etapeKey) ? 'TOUTES' : etapeKey;
+    rendreChantierSecteur(secteurInspecteIdx);
+}
+
+function correspondEtapeEngin(categorie, etapeKey) {
+    if (!etapeKey || etapeKey === 'TOUTES') return true;
+    const cat = (categorie || '').toLowerCase();
+    if (etapeKey === 'Decapage') return cat.includes('décap') || cat.includes('decap');
+    if (etapeKey === 'Transport') return cat.includes('transport');
+    if (etapeKey === 'Chargement') return cat.includes('charg');
+    if (etapeKey === 'Tremie') return cat.includes('trém') || cat.includes('trem');
+    if (etapeKey === 'Convoyeur') return cat.includes('convoy');
+    if (etapeKey === 'Traitement') return cat.includes('traitement');
+    if (etapeKey === 'Lavage') return cat.includes('lavage');
+    if (etapeKey === 'Excavation') {
+        return !cat.includes('forag') && !cat.includes('levag') && !cat.includes('grue') &&
+               !cat.includes('décap') && !cat.includes('decap') && !cat.includes('transport') &&
+               !cat.includes('charg') && !cat.includes('trém') && !cat.includes('trem') &&
+               !cat.includes('convoy') && !cat.includes('traitement') && !cat.includes('lavage');
+    }
+    return true;
+}
+
 function ouvrirChantierSecteur(idx) {
+    if (secteurInspecteIdx !== idx) etapeChantierFiltre = 'TOUTES';
     secteurInspecteIdx = idx;
     rendreChantierSecteur(idx);
 }
@@ -810,16 +837,17 @@ function rendreChantierSecteur(idx) {
         document.getElementById('sector-chantier-title').innerText = `🚧 Décapage — ${p.nom} | Stériles restants : ${rest} / ${tot} t (${pct}%) | Vitesse : ${st.debitDecapage} t/h (${heuresEst})`;
 
         const maillonsDecap = [
-            { nom: '1. 🚜 Bulldozer', val: st.debits.Decapage, nb: st.counts.Decapage },
-            { nom: '2. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
-            { nom: '3. 🚛 Camion benne', val: st.debits.Transport, nb: st.counts.Transport }
+            { key: 'Decapage', nom: '1. 🚜 Bulldozer', val: st.debits.Decapage, nb: st.counts.Decapage },
+            { key: 'Excavation', nom: '2. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
+            { key: 'Transport', nom: '3. 🚛 Camion benne', val: st.debits.Transport, nb: st.counts.Transport }
         ];
 
         gridEl.innerHTML = maillonsDecap.map(m => {
             const isMin = m.val === st.debitDecapage;
+            const isSelected = etapeChantierFiltre === m.key;
             const borderColor = m.val === 0 ? '#ef4444' : isMin ? '#fbbf24' : '#34d399';
             return `
-                <div style="background:#1c1917; padding:8px 10px; border-radius:6px; border:1px solid #44403c; border-bottom:3px solid ${borderColor}; text-align:center;">
+                <div onclick="filtrerEtapeChantier('${m.key}')" title="Cliquer pour voir/régler les engins de cette étape" style="cursor:pointer; background:${isSelected ? '#292524' : '#1c1917'}; padding:8px 10px; border-radius:6px; border:${isSelected ? '2px solid #fbbf24' : '1px solid #44403c'}; border-bottom:3px solid ${borderColor}; text-align:center;">
                     <div style="font-size:0.82em; color:#a8a29e;">${m.nom} (${m.nb})</div>
                     <div style="font-size:1.15em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'}; margin:2px 0;">${m.val} t/h</div>
                     <div style="font-size:0.75em; color:#d6d3d1;">${m.val === 0 ? '🚨 Manquant' : isMin ? '⚙️ Maillon limitant' : '✅ Prêt'}</div>
@@ -836,21 +864,22 @@ function rendreChantierSecteur(idx) {
         document.getElementById('sector-chantier-title').innerText = `🏗️ Chantier — ${p.nom} | Total terre traitée : ${st.totalTerreTh} t/h | Pureté : ${p.pureteReelle} g/t | Réserve : ${Math.round(p.reserveReelle).toLocaleString()} t`;
 
         const maillons = [
-            { nom: '1. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
-            { nom: '2. 🚛 Transport', val: st.debits.Transport, nb: st.counts.Transport },
-            { nom: '3. 🏗️ Chargement', val: st.debits.Chargement, nb: st.counts.Chargement },
-            { nom: '4. 📥 Trémie', val: st.debits.Tremie, nb: st.counts.Tremie },
-            { nom: '5. ➿ Convoyeur', val: st.debits.Convoyeur, nb: st.counts.Convoyeur },
-            { nom: '6. ⚙️ Traitement', val: st.debits.Traitement, nb: st.counts.Traitement },
-            { nom: '7. 💧 Lavage', val: st.debits.Lavage, nb: st.counts.Lavage }
+            { key: 'Excavation', nom: '1. ⛏️ Excavation', val: st.debits.Excavation, nb: st.counts.Excavation },
+            { key: 'Transport', nom: '2. 🚛 Transport', val: st.debits.Transport, nb: st.counts.Transport },
+            { key: 'Chargement', nom: '3. 🏗️ Chargement', val: st.debits.Chargement, nb: st.counts.Chargement },
+            { key: 'Tremie', nom: '4. 📥 Trémie', val: st.debits.Tremie, nb: st.counts.Tremie },
+            { key: 'Convoyeur', nom: '5. ➿ Convoyeur', val: st.debits.Convoyeur, nb: st.counts.Convoyeur },
+            { key: 'Traitement', nom: '6. ⚙️ Traitement', val: st.debits.Traitement, nb: st.counts.Traitement },
+            { key: 'Lavage', nom: '7. 💧 Lavage', val: st.debits.Lavage, nb: st.counts.Lavage }
         ];
 
         gridEl.innerHTML = maillons.map(m => {
             const isMin = m.val === st.debitChaine;
+            const isSelected = etapeChantierFiltre === m.key;
             const borderColor = m.val === 0 ? '#ef4444' : isMin && st.estEquilibre ? '#34d399' : isMin ? '#fbbf24' : '#f97316';
             const statusTxt = m.val === 0 ? '🚨 Manquant' : st.estEquilibre ? '⚖️ Synchro' : isMin ? '⚠️ Limitant' : '⚠️ Surrégime';
             return `
-                <div style="background:#1c1917; padding:8px 10px; border-radius:6px; border:1px solid #44403c; border-bottom:3px solid ${borderColor}; text-align:center;">
+                <div onclick="filtrerEtapeChantier('${m.key}')" title="Cliquer pour voir/régler les engins de cette étape" style="cursor:pointer; background:${isSelected ? '#292524' : '#1c1917'}; padding:8px 10px; border-radius:6px; border:${isSelected ? '2px solid #fbbf24' : '1px solid #44403c'}; border-bottom:3px solid ${borderColor}; text-align:center;">
                     <div style="font-size:0.8em; color:#a8a29e; white-space:nowrap;">${m.nom} (${m.nb})</div>
                     <div style="font-size:1.15em; font-weight:800; color:${m.val === 0 ? '#f87171' : '#fbbf24'}; margin:2px 0;">${m.val} t/h</div>
                     <div style="font-size:0.75em; color:#d6d3d1;">${statusTxt}</div>
@@ -869,12 +898,17 @@ function rendreChantierSecteur(idx) {
         }
     }
 
+    if (etapeChantierFiltre !== 'TOUTES') {
+        alertEl.innerHTML += ` <button class="ui mini yellow button" style="margin-left:8px;" onclick="filtrerEtapeChantier('TOUTES')">🌐 Voir toutes les étapes (${etapeChantierFiltre})</button>`;
+    }
+
     const tbody = document.getElementById('sector-assigned-tbody');
-    if (st.affectes.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur.</td></tr>';
+    const affectesFiltres = st.affectes.filter(e => correspondEtapeEngin(e.categorie, etapeChantierFiltre));
+    if (affectesFiltres.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur${etapeChantierFiltre !== 'TOUTES' ? ' pour l’étape ' + etapeChantierFiltre : ''}.</td></tr>`;
     } else {
         const optionsSecteurs = parcelles.map((sec, sIdx) => (sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === etat.parcelleActive)) ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
-        tbody.innerHTML = st.affectes.map(e => {
+        tbody.innerHTML = affectesFiltres.map(e => {
             const vMin = parseFloat(e.vitesse_min_th) || 2;
             const vMax = parseFloat(e.vitesse_max_th) || 5;
             const vReg = parseFloat(e.vitesse_reglee_th) || vMin;
