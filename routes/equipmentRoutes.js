@@ -68,7 +68,13 @@ router.get('/', requireAuth, async (req, res) => {
     try {
         const cfg = getGameConfig();
 
-        const myFleetRes = await pool.query('SELECT * FROM player_fleet WHERE owner_id = $1 ORDER BY id ASC', [userId]);
+        const myFleetRes = await pool.query(`
+            SELECT f.*, COALESCE(c.prix_neuf, 5000) AS prix_neuf
+            FROM player_fleet f
+            LEFT JOIN equipment_catalog c ON c.id = f.catalog_id
+            WHERE f.owner_id = $1
+            ORDER BY f.id ASC
+        `, [userId]);
         await pool.query('UPDATE mines SET foreuses = $1 WHERE user_id = $2', [myFleetRes.rows.length, userId]);
 
         const catalogRes = await pool.query('SELECT * FROM equipment_catalog WHERE actif = TRUE ORDER BY prix_neuf ASC');
@@ -119,6 +125,7 @@ router.get('/', requireAuth, async (req, res) => {
             piecesStock,
             tarifsPieces,
             coeffLoyerJeu: parseFloat(cfg.coeffLoyerJeu) || 0.08,
+            tauxRevisionUsurePct: parseFloat(cfg.tauxRevisionUsurePct) || 0.35,
             myFleet: myFleetRes.rows,
             catalog: catalogRes.rows,
             auctions: auctionsRes.rows,
@@ -496,19 +503,25 @@ router.post('/rent', requireAuth, async (req, res) => {
 });
 
 // =========================================================================
-// 7. ATELIER : RÉVISER UN ENGIN PRÉCIS DE SA FLOTTE
+// 7. ATELIER : RÉVISER UN ENGIN PRÉCIS DE SA FLOTTE (PRIX PROPORTIONNEL À L'USURE)
 // =========================================================================
 router.post('/repair', requireAuth, async (req, res) => {
     const { fleetId } = req.body;
     const userId = req.session.userId;
     const cfg = getGameConfig();
-    const cout = parseFloat(cfg.coutRevision);
+    const tauxRev = parseFloat(cfg.tauxRevisionUsurePct) || 0.35;
 
     const client = await pool.connect();
     try {
         await client.query('BEGIN');
         const mineRes = await client.query('SELECT argent FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
-        const fleetRes = await client.query('SELECT * FROM player_fleet WHERE id = $1 AND owner_id = $2 FOR UPDATE', [fleetId, userId]);
+        const fleetRes = await client.query(`
+            SELECT f.*, COALESCE(c.prix_neuf, 5000) AS prix_neuf
+            FROM player_fleet f
+            LEFT JOIN equipment_catalog c ON c.id = f.catalog_id
+            WHERE f.id = $1 AND f.owner_id = $2
+            FOR UPDATE OF f
+        `, [fleetId, userId]);
 
         if (fleetRes.rows.length === 0) {
             await client.query('ROLLBACK');
@@ -520,6 +533,12 @@ router.post('/repair', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Impossible de réviser un engin actuellement loué.' });
         }
 
+        const usureAct = parseFloat(engin.usure_actuelle) || 0;
+        if (usureAct <= 0) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Cet engin est déjà à 0% d’usure (aucune révision nécessaire).' });
+        }
+
         const checkGrue = await verifierGrueMaintenance(client, userId, engin);
         if (!checkGrue.ok) {
             await client.query('ROLLBACK');
@@ -528,24 +547,28 @@ router.post('/repair', requireAuth, async (req, res) => {
             });
         }
 
+        const prixNeuf = parseFloat(engin.prix_neuf) || 5000;
+        const cout = Math.max(50, Math.round(prixNeuf * tauxRev * (usureAct / 100)));
+
         if (parseFloat(mineRes.rows.at(0).argent) < cout) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ error: 'Trésorerie insuffisante.' });
+            return res.status(400).json({ error: `Trésorerie insuffisante (${cout.toLocaleString()} € requis pour réviser ${Math.round(usureAct)}% d'usure).` });
         }
 
-        const newUsure = Math.max(0, parseFloat(engin.usure_actuelle) - 25);
         await client.query('UPDATE mines SET argent = argent - $1 WHERE user_id = $2', [cout, userId]);
-        await client.query('UPDATE player_fleet SET usure_actuelle = $1 WHERE id = $2', [newUsure, fleetId]);
+        await client.query('UPDATE player_fleet SET usure_actuelle = 0 WHERE id = $1', [fleetId]);
 
         await client.query('COMMIT');
-        res.json({ success: true, message: `${engin.nom} révisé (-25% usure / -${cout} €).` });
+        res.json({ success: true, message: `🔧 ${engin.nom} révisé et remis à 0% d'usure (-${cout.toLocaleString()} €).` });
     } catch (err) {
         await client.query('ROLLBACK');
+        console.error('Erreur /repair :', err);
         res.status(500).json({ error: 'Erreur révision engin' });
     } finally {
         client.release();
     }
 });
+
 
 // =========================================================================
 // 8. CONCESSIONNAIRES : ACHETER UNE PIÈCE PAR FAMILLE & GABARIT

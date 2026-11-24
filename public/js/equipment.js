@@ -29,9 +29,9 @@ function rendreBarreFiltresZone(containerId, targetEl, zone, avecGabarit = true)
 
     const categories = [
         { id: 'TOUS', label: '🌐 Tous' },
-        { id: 'Forage', label: '🛢️ Forage (Sondage)' },
-        { id: 'Levage', label: '🏗️ Levage (Grues)' },
-        { id: 'Décapage', label: '🚜 Décapage (Bulldozer)' },
+        { id: 'Forage', label: '🛢️ Forage' },
+        { id: 'Levage', label: '🏗️ Levage' },
+        { id: 'Décapage', label: '🚜 Décapage' },
         { id: 'Excavation', label: '⛏️ Excavation' },
         { id: 'Transport', label: '🚛 Transport' },
         { id: 'Chargement', label: '🏗️ Chargement' },
@@ -51,9 +51,9 @@ function rendreBarreFiltresZone(containerId, targetEl, zone, avecGabarit = true)
     const fActuel = eqFiltres[zone];
     toolbar.style.cssText = 'display:flex; flex-direction:column; gap:10px; margin-bottom:16px; padding:12px; background:#1c1917; border-radius:8px; border:1px solid #44403c;';
     toolbar.innerHTML = `
-        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(145px, 1fr)); gap:6px; width:100%;">
+        <div style="display:grid; grid-template-columns:repeat(6, 1fr); gap:6px; width:100%;">
             ${categories.map(c => `
-                <button class="ui mini ${fActuel.cat === c.id ? 'yellow' : ''} button" style="margin:0; width:100%; text-align:center;" onclick="changerFiltreEq('${zone}', '${c.id}', null)">${c.label}</button>
+                <button class="ui mini ${fActuel.cat === c.id ? 'yellow' : ''} button" style="margin:0; width:100%; padding:8px 6px; white-space:nowrap; text-align:center;" onclick="changerFiltreEq('${zone}', '${c.id}', null)">${c.label}</button>
             `).join('')}
         </div>
         ${avecGabarit ? `
@@ -143,13 +143,21 @@ function rendreMaFlotte() {
             const nivGrue = gab === 'Petit' ? 1 : gab === 'Géant' ? 3 : 2;
             const infoGrue = isGrue ? '' : ` + Grue Niv.${nivGrue}`;
 
-            const pIdx = parseInt(f.parcelle_index);
+            const pIdx = isNaN(parseInt(f.parcelle_index)) ? 0 : parseInt(f.parcelle_index);
+            const listeParcelles = (typeof parcelles !== 'undefined' && Array.isArray(parcelles)) ? parcelles : [];
+            const secActifId = (typeof etat !== 'undefined' && etat.parcelleActive !== undefined) ? parseInt(etat.parcelleActive) : 0;
             const nomSecteur = pIdx < 0
                 ? '🅿️ Au dépôt'
-                : `🗺️ ${(typeof parcelles !== 'undefined' && Array.isArray(parcelles) && parcelles.at(pIdx)?.nom) || ('Secteur ' + String.fromCharCode(65 + (isNaN(pIdx) ? 0 : pIdx)))}`;
+                : `🗺️ ${listeParcelles.at(pIdx)?.nom || ('Secteur ' + String.fromCharCode(65 + pIdx))}`;
+
+            const optionsAffectation = `<option value="-1" ${pIdx < 0 ? 'selected' : ''}>🅿️ Au dépôt (Arrêt)</option>` +
+                listeParcelles.map((sec, sIdx) => {
+                    const ouverte = sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === secActifId);
+                    return ouverte ? `<option value="${sIdx}" ${sIdx === pIdx ? 'selected' : ''}>🗺️ ${sec.nom}</option>` : '';
+                }).join('');
 
             const badgeStatut = f.statut === 'ACTIF'
-                ? `<span class="ui ${pIdx < 0 ? 'grey' : 'green'} label">${nomSecteur}</span>`
+                ? `<select style="padding:5px 8px; border-radius:4px; background:#1c1917; color:${pIdx < 0 ? '#a8a29e' : '#34d399'}; border:1px solid #44403c; font-weight:700; cursor:pointer;" onchange="changerAffectationFlotte('FLEET', ${f.id}, this.value)">${optionsAffectation}</select>`
                 : f.statut === 'EN_PANNE'
                 ? `<span class="ui red label">🚨 EN PANNE (${nomSecteur})</span>`
                 : f.statut === 'EN_VENTE'
@@ -165,8 +173,12 @@ function rendreMaFlotte() {
             } else if (f.statut === 'OFFRE_LOC') {
                 actions = `<button class="ui mini red button" onclick="annulerOffreLocation(${f.id})">❌ Retirer l'offre</button>`;
             } else if (f.statut === 'ACTIF') {
+                const usureExacte = parseFloat(f.usure_actuelle) || 0;
+                const tauxRev = parseFloat(eqData.tauxRevisionUsurePct) || 0.35;
+                const prixNeuf = parseFloat(f.prix_neuf) || 5000;
+                const coutRev = usureExacte > 0 ? Math.max(50, Math.round(prixNeuf * tauxRev * (usureExacte / 100))) : 0;
                 actions = `
-                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})">🔧 Réviser (-25%${infoGrue})</button>
+                    <button class="ui mini blue button" onclick="reviserEngin(${f.id})" ${usureExacte <= 0 ? 'disabled' : ''}>🔧 Réviser${coutRev > 0 ? ' (' + coutRev.toLocaleString() + ' €)' : ''}</button>
                     <button class="ui mini orange button" onclick="ouvrirVenteEngin(${f.id})">🏷️ Vendre</button>
                     <button class="ui mini green button" onclick="ouvrirLocationEngin(${f.id})">🤝 Louer</button>
                 `;
@@ -194,23 +206,39 @@ function rendreMaFlotte() {
         if (mesLocationsFiltrees.length === 0) {
             locTbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#a8a29e;">Aucune location en cours pour ce filtre.</td></tr>';
         } else {
+            const listeParcelles = (typeof parcelles !== 'undefined' && Array.isArray(parcelles)) ? parcelles : [];
+            const secActifId = (typeof etat !== 'undefined' && etat.parcelleActive !== undefined) ? parseInt(etat.parcelleActive) : 0;
+
             locTbody.innerHTML = mesLocationsFiltrees.map(r => {
-                const rIdx = parseInt(r.parcelle_index);
-                const rLieu = rIdx < 0
-                    ? '🅿️ Au dépôt'
-                    : `🗺️ ${(typeof parcelles !== 'undefined' && Array.isArray(parcelles) && parcelles.at(rIdx)?.nom) || ('Secteur ' + String.fromCharCode(65 + (isNaN(rIdx) ? 0 : rIdx)))}`;
+                const rIdx = isNaN(parseInt(r.parcelle_index)) ? 0 : parseInt(r.parcelle_index);
+                const optsLoc = `<option value="-1" ${rIdx < 0 ? 'selected' : ''}>🅿️ Au dépôt</option>` +
+                    listeParcelles.map((sec, sIdx) => {
+                        const ouverte = sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === secActifId);
+                        return ouverte ? `<option value="${sIdx}" ${sIdx === rIdx ? 'selected' : ''}>🗺️ ${sec.nom}</option>` : '';
+                    }).join('');
                 return `
                 <tr>
                     <td><strong>${r.nom}</strong> (${r.source_type === 'OFFICIEL' ? 'Parc Officiel' : 'PDG ' + r.owner_name})</td>
                     <td>${formaterRendementEq(r)}</td>
                     <td>${r.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(r.loyer_jour).toLocaleString()} €/j</td>
-                    <td><span class="ui blue label">${rLieu} • ${r.jours_restants}j restants</span></td>
+                    <td>
+                        <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
+                            <select style="padding:4px 6px; border-radius:4px; background:#1c1917; color:#34d399; border:1px solid #44403c; font-weight:700;" onchange="changerAffectationFlotte('RENTAL', ${r.id}, this.value)">${optsLoc}</select>
+                            <span class="ui blue label">${r.jours_restants}j restants</span>
+                        </div>
+                    </td>
                 </tr>
             `;
             }).join('');
-
         }
+    }
+}
+
+async function changerAffectationFlotte(targetType, targetId, parcelleIndex) {
+    if (typeof affecterEnginSecteur === 'function') {
+        await affecterEnginSecteur(targetType, targetId, parcelleIndex);
+        chargerModuleMateriel();
     }
 }
 
