@@ -49,20 +49,38 @@ function rendreBarreFiltresZone(containerId, targetEl, zone, avecGabarit = true)
     ];
 
     const fActuel = eqFiltres[zone];
+    toolbar.style.cssText = 'display:flex; flex-direction:column; gap:10px; margin-bottom:16px; padding:12px; background:#1c1917; border-radius:8px; border:1px solid #44403c;';
     toolbar.innerHTML = `
-        <div style="display:flex; flex-wrap:wrap; gap:6px;">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(145px, 1fr)); gap:6px; width:100%;">
             ${categories.map(c => `
-                <button class="ui mini ${fActuel.cat === c.id ? 'yellow' : ''} button" onclick="changerFiltreEq('${zone}', '${c.id}', null)">${c.label}</button>
+                <button class="ui mini ${fActuel.cat === c.id ? 'yellow' : ''} button" style="margin:0; width:100%; text-align:center;" onclick="changerFiltreEq('${zone}', '${c.id}', null)">${c.label}</button>
             `).join('')}
         </div>
         ${avecGabarit ? `
-        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
-            <span style="font-size:0.85em; color:#a8a29e;">Gabarit :</span>
+        <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center; padding-top:8px; border-top:1px dashed #44403c;">
+            <span style="font-size:0.85em; color:#a8a29e; font-weight:700; margin-right:4px;">📐 Gabarit :</span>
             ${gabarits.map(g => `
-                <button class="ui mini ${fActuel.gab === g.id ? 'blue' : ''} button" onclick="changerFiltreEq('${zone}', null, '${g.id}')">${g.label}</button>
+                <button class="ui mini ${fActuel.gab === g.id ? 'blue' : ''} button" style="margin:0;" onclick="changerFiltreEq('${zone}', null, '${g.id}')">${g.label}</button>
             `).join('')}
         </div>` : ''}
     `;
+}
+
+function formaterRendementEq(item) {
+    const cat = (item.categorie || '').toLowerCase();
+    const gab = (item.gabarit || 'Moyen').toLowerCase();
+    const nom = item.nom || '';
+    if (cat.includes('forag')) {
+        const matchM = nom.match(/(\d+)\s*m/i);
+        const prof = matchM ? parseInt(matchM[1]) : gab.includes('g') ? 60 : gab === 'moyen' ? 40 : 20;
+        return `🛢️ Sondage max : <strong>${prof} m</strong>`;
+    }
+    if (cat.includes('levag')) {
+        const matchT = nom.match(/(\d+)\s*t/i);
+        const tonnes = matchT ? parseInt(matchT[1]) : gab.includes('g') ? 150 : gab === 'moyen' ? 50 : 15;
+        return `🏗️ Levage max : <strong>${tonnes} t</strong>`;
+    }
+    return `⛏️ Débit : <strong>${item.vitesse_min_th || 2}-${item.vitesse_max_th || 5} t/h</strong>`;
 }
 
 function trierCatalogueLogique(liste) {
@@ -157,7 +175,7 @@ function rendreMaFlotte() {
             return `
                 <tr>
                     <td><strong>${f.nom}</strong><br><small style="color:#a8a29e;">${f.categorie} — Gabarit : <strong style="color:#fbbf24;">${gab}</strong></small></td>
-                    <td><strong>${f.vitesse_min_th}-${f.vitesse_max_th} t/h</strong></td>
+                    <td>${formaterRendementEq(f)}</td>
                     <td>${f.carburant_jour} €/j</td>
                     <td><strong style="color:${usure > 60 ? '#f87171' : '#34d399'};">${usure}%</strong> (+${f.usure_jour}%/j)</td>
                     <td>${badgeStatut}</td>
@@ -184,7 +202,7 @@ function rendreMaFlotte() {
                 return `
                 <tr>
                     <td><strong>${r.nom}</strong> (${r.source_type === 'OFFICIEL' ? 'Parc Officiel' : 'PDG ' + r.owner_name})</td>
-                    <td><strong>${r.vitesse_min_th}-${r.vitesse_max_th} t/h</strong></td>
+                    <td>${formaterRendementEq(r)}</td>
                     <td>${r.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(r.loyer_jour).toLocaleString()} €/j</td>
                     <td><span class="ui blue label">${rLieu} • ${r.jours_restants}j restants</span></td>
@@ -225,7 +243,7 @@ function rendreBoutiqueNeuf() {
                     <span class="ui yellow label">${item.gabarit || 'Moyen'}</span>
                 </div>
                 <h4 style="color:#fbbf24; margin-bottom:8px;">${item.nom}</h4>
-                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛏️ Débit : <strong>${item.vitesse_min_th}-${item.vitesse_max_th} t/h</strong></p>
+                <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">${formaterRendementEq(item)}</p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⛽ Carburant : <strong>${item.carburant_jour} €/jour</strong></p>
                 <p style="font-size:0.88em; color:#d6d3d1; margin-bottom:4px;">⚙️ Usure : <strong>${item.usure_jour}% /jour</strong> (Garanti 0% neuf)</p>
                 <p style="font-size:0.88em; color:#a8a29e; margin-bottom:12px;">🔧 Pièces en cas de panne : <strong>${item.pieces_panne || 1} pièce(s)</strong></p>
@@ -320,7 +338,7 @@ function rendreBrocanteEncheres() {
         return `
             <tr>
                 <td><strong>${a.nom}</strong><br><small style="color:#a8a29e;">Vendeur : ${a.seller_name} | Usure : ${Math.round(a.usure_actuelle)}%</small></td>
-                <td>${a.vitesse_min_th || 2}-${a.vitesse_max_th || 5} t/h<br><small>${a.carburant_jour} €/j</small></td>
+                <td>${formaterRendementEq(o)}</td>
                 <td>${isBrocante ? '<span class="ui green label">Vente Directe</span>' : '<span class="ui orange label">Enchère</span>'}</td>
                 <td class="money-text">${Math.round(a.prix_actuel).toLocaleString()} €<br><small style="color:#a8a29e;">${a.bidder_name ? 'Meneur : ' + a.bidder_name : 'Aucune offre'}</small></td>
                 <td><strong>${heuresRest}h ${minsRest}m</strong></td>
@@ -356,7 +374,7 @@ function rendreLocationEngins() {
                             </div>
                         </div>
                     </td>
-                    <td><strong>${item.vitesse_min_th}-${item.vitesse_max_th} t/h</strong></td>
+                    <td>${formaterRendementEq(item)}</td>
                     <td>${item.carburant_jour} €/j</td>
                     <td class="money-text">${loyerEstime.toLocaleString()} €/j</td>
                     <td>
@@ -383,7 +401,7 @@ function rendreLocationEngins() {
             pdgTbody.innerHTML = offresPdgFiltrees.map(o => `
                 <tr>
                     <td><strong>${o.nom}</strong><br><small>Propriétaire : ${o.owner_name}</small></td>
-                    <td><strong>${o.vitesse_min_th || 2}-${o.vitesse_max_th || 5} t/h</strong></td>
+                    <td>${formaterRendementEq(o)}</td>
                     <td>${o.carburant_jour} €/j</td>
                     <td class="money-text">${Math.round(o.loyer_jour).toLocaleString()} €/j</td>
                     <td><span class="ui yellow label">${o.jours_restants} jour(s)</span></td>
