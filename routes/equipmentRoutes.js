@@ -685,7 +685,7 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
     const { targetType, targetId, parcelleIndex } = req.body;
     const userId = req.session.userId;
     const pIdx = parseInt(parcelleIndex);
-    if (isNaN(pIdx) || pIdx < 0 || pIdx > 11) return res.status(400).json({ error: 'Secteur invalide.' });
+    if (isNaN(pIdx) || pIdx < -1 || pIdx > 11) return res.status(400).json({ error: 'Secteur invalide.' });
 
     try {
         const mineRes = await pool.query('SELECT parcelles, parcelle_active FROM mines WHERE user_id = $1', [userId]);

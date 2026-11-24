@@ -829,8 +829,9 @@ function rendreChantierSecteur(idx) {
 
     panel.style.display = 'block';
     const gridEl = document.getElementById('sector-debits-grid');
-    gridEl.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(125px, 1fr)); gap:8px; margin-bottom:10px;';
+    gridEl.style.cssText = 'display:grid; grid-template-columns:repeat(auto-fit, minmax(125px, 1fr)); gap:8px; margin-bottom:12px;';
     const alertEl = document.getElementById('sector-bottleneck-alert');
+    alertEl.style.cssText = 'display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:12px;';
 
     if (st.estEnDecapage) {
         const rest = Math.round(parseFloat(p.sterilesRestants) || 0);
@@ -903,8 +904,9 @@ function rendreChantierSecteur(idx) {
     }
 
     if (etapeChantierFiltre !== 'TOUTES') {
-        alertEl.innerHTML += ` <button class="ui mini yellow button" style="margin-left:8px;" onclick="filtrerEtapeChantier('TOUTES')">🌐 Voir toutes les étapes (${etapeChantierFiltre})</button>`;
+        alertEl.innerHTML += `<button class="ui mini yellow button" onclick="filtrerEtapeChantier('TOUTES')">🌐 Voir toutes les étapes (${etapeChantierFiltre})</button>`;
     }
+
 
     const tbody = document.getElementById('sector-assigned-tbody');
     const affectesFiltres = st.affectes.filter(e => correspondEtapeEngin(e.categorie, etapeChantierFiltre));
