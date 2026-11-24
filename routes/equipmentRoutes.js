@@ -688,15 +688,21 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
     if (isNaN(pIdx) || pIdx < 0 || pIdx > 11) return res.status(400).json({ error: 'Secteur invalide.' });
 
     try {
-        const mineRes = await pool.query('SELECT parcelles FROM mines WHERE user_id = $1', [userId]);
+        const mineRes = await pool.query('SELECT parcelles, parcelle_active FROM mines WHERE user_id = $1', [userId]);
         const parcelles = mineRes.rows.at(0)?.parcelles || [];
+        const parcelleActive = parseInt(mineRes.rows.at(0)?.parcelle_active) || 0;
         const pCible = parcelles.at(pIdx);
 
         if (!pCible || !pCible.estSondee) {
             return res.status(400).json({ error: 'Vous devez d’abord sonder ce secteur avant d’y envoyer du matériel !' });
         }
+        const estOuverte = pCible.estOuverte !== undefined ? pCible.estOuverte : (pIdx === 0 || pIdx === parcelleActive);
+        if (!estOuverte) {
+            return res.status(400).json({ error: `La fosse de ${pCible.nom} n'est pas encore ouverte ! Cliquez sur "Ouvrir la fosse" dans le cadastre pour démarrer le décapage.` });
+        }
 
         const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
+
         const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
 
         await pool.query(`UPDATE ${table} SET parcelle_index = $1 WHERE id = $2 AND ${ownerCol} = $3`, [pIdx, targetId, userId]);

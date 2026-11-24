@@ -88,8 +88,10 @@ router.get('/state', requireAuth, async (req, res) => {
 
         const parcellesNormalisees = (mine.parcelles || []).map((p, idx) => ({
             ...p,
-            profondeurMetres: parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx)
+            profondeurMetres: parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx),
+            estOuverte: p.estOuverte !== undefined ? p.estOuverte : (idx === 0 || idx === mine.parcelle_active)
         }));
+
         const ordersRes = await pool.query(
             `SELECT * FROM market_sell_orders WHERE user_id = $1 AND statut = 'EN_ATTENTE' ORDER BY id ASC`,
             [req.session.userId]
@@ -213,7 +215,7 @@ router.post('/action', requireAuth, async (req, res) => {
         } else if (type === 'parcelle') {
             const id = parseInt(payload);
             const p = parcelles.at(id);
-            if (!p || id === parcelleActive) {
+            if (!p) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ error: 'Parcelle invalide' });
             }
@@ -260,26 +262,53 @@ router.post('/action', requireAuth, async (req, res) => {
                 argent -= coutCarottageReel;
                 p.profondeurMetres = profondeur;
                 p.estSondee = true;
+                p.estOuverte = false;
+                p.estDecapee = false;
+
+                const erreur = (Math.random() * 0.4) - 0.2;
+                p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
+                message = `Carottage ${p.nom} (${profondeur} m) : teneur estimée ~${p.estimationPurete} g/t (-${coutCarottageReel} €). Vous pouvez maintenant ouvrir la fosse pour lancer le décapage.`;
+            } else if (!p.estOuverte && id !== 0 && id !== parcelleActive) {
+                const maxActives = parseInt(cfg.maxConcessionsActives) || 5;
+                const nbOuvertes = parcelles.filter((sec, sIdx) =>
+                    (sec.estOuverte || sIdx === 0 || sIdx === parcelleActive) && (parseFloat(sec.reserveReelle) || 0) > 0
+                ).length;
+
+                if (nbOuvertes >= maxActives) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: `Limite atteinte : maximum ${maxActives} concessions ouvertes simultanément (épuisez d'abord une fosse active).` });
+                }
+
+                const mktRes = await client.query('SELECT cours_or FROM market_state WHERE id = 1');
+                const coursOr = mktRes.rows.length > 0 ? parseFloat(mktRes.rows.at(0).cours_or) : parseFloat(cfg.coursOrInitial);
+                const tauxOuverture = parseFloat(cfg.tauxOuvertureFossePct) || 0.30;
+                const valeurOrEstimee = (parseFloat(p.reserveReelle) || 0) * (parseFloat(p.pureteReelle) || 0) * coursOr;
+                const coutOuverture = Math.round(valeurOrEstimee * tauxOuverture);
+
+                if (argent < coutOuverture) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: `Trésorerie insuffisante pour ouvrir la fosse (${coutOuverture.toLocaleString()} € requis = ${Math.round(tauxOuverture * 100)}% de la valeur en or).` });
+                }
+
+                argent -= coutOuverture;
+                p.estOuverte = true;
                 p.estDecapee = false;
                 const ratioSteriles = parseFloat(cfg.ratioSterilesDecapage) || 0.15;
                 p.sterilesTotal = Math.max(50, Math.round((parseFloat(p.reserveReelle) || 1000) * ratioSteriles));
                 p.sterilesRestants = p.sterilesTotal;
 
-                const erreur = (Math.random() * 0.4) - 0.2;
-                p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
-                message = `Carottage ${p.nom} (${profondeur} m) : teneur ~${p.estimationPurete} g/t | Décapage requis : ${p.sterilesTotal} t de stériles (-${coutCarottageReel} €).`;
+                message = `⛏️ Fosse ouverte sur ${p.nom} (-${coutOuverture.toLocaleString()} €) ! Décapage requis : ${p.sterilesTotal} t de terres stériles (Bulldozer + Excavatrice + Camion benne).`;
             } else {
+                if (id === parcelleActive) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: 'Les orpailleurs manuels travaillent déjà sur cette concession.' });
+                }
                 if (p.estDecapee === false && (parseFloat(p.sterilesRestants) || 0) > 0) {
                     await client.query('ROLLBACK');
-                    return res.status(400).json({ error: `Décapage inachevé sur ${p.nom} (${Math.round(p.sterilesRestants)} t de terre stérile restantes) ! Envoyez un Bulldozer + Excavatrice + Camion benne.` });
+                    return res.status(400).json({ error: `Décapage inachevé sur ${p.nom} (${Math.round(p.sterilesRestants)} t de stériles restantes) !` });
                 }
-                if (argent < cfg.coutDemenagement) {
-                    await client.query('ROLLBACK');
-                    return res.status(400).json({ error: 'Trésorerie insuffisante' });
-                }
-                argent -= cfg.coutDemenagement;
                 parcelleActive = id;
-                message = `Déménagement vers ${p.nom} (teneur réelle : ${p.pureteReelle} g/t / -${cfg.coutDemenagement} €).`;
+                message = `Équipe d'orpaillage manuel affectée sur ${p.nom} (teneur réelle : ${p.pureteReelle} g/t).`;
             }
 
         } else if (type === 'payer_facture') {

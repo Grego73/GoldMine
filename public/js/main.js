@@ -125,8 +125,11 @@ async function chargerEtatJeu() {
         setTxt('btn-foreuse', `Acheter (${CONFIG.coutForeuse} €)`);
         setTxt('btn-reparer', `Réviser (${CONFIG.coutRevision} €)`);
         setTxt('btn-prime', `Prime (${CONFIG.coutPrime} €)`);
+        const maxActives = parseInt(CONFIG.maxConcessionsActives) || 5;
+        const nbOuvertes = parcelles.filter((p, idx) => (p.estOuverte || idx === 0 || idx === etat.parcelleActive) && (parseFloat(p.reserveReelle) || 0) > 0).length;
+        const pctOuv = Math.round((parseFloat(CONFIG.tauxOuvertureFossePct) || 0.30) * 100);
         setTxt('btn-marketing', `Campagne Marketing +10 pts (${CONFIG.coutUniteMarketing} €)`);
-        setTxt('desc-prospection', `Carottage : ${CONFIG.coutCarottage} € | Déménagement engins : ${CONFIG.coutDemenagement} €`);
+        setTxt('desc-prospection', `Carottage : ${CONFIG.coutCarottage} € | Ouverture fosse (décapage) : ${pctOuv}% de la valeur en or | Concessions ouvertes : ${nbOuvertes} / ${maxActives}`);
         setTxt('desc-taxe', `Redevance minière : ${Math.round(CONFIG.taxeMiniere * 100)}%`);
 
         const selectCadence = document.getElementById('cadence');
@@ -484,60 +487,71 @@ function dessinerCarte() {
         const badgeForeuse = prof <= maxP ? 'Foreuse Petit' : prof <= maxM ? 'Foreuse Moyen' : 'Foreuse Géant';
 
         if (p.estSondee) {
-            const st = calculerStatsSecteur(i);
-            const detailMat = `🚜${st.counts.Decapage} | ⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🏗️${st.counts.Chargement} 📥${st.counts.Tremie} ➿${st.counts.Convoyeur} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
+            const estOuverte = p.estOuverte !== undefined ? p.estOuverte : (i === 0 || i === etat.parcelleActive);
+            const coursOr = parseFloat(market.coursOr) || parseFloat(CONFIG.coursOrInitial) || 60;
+            const tauxOuv = parseFloat(CONFIG.tauxOuvertureFossePct) || 0.30;
+            const coutOuv = Math.round((parseFloat(p.reserveReelle) || 0) * (parseFloat(p.pureteReelle) || 0) * coursOr * tauxOuv);
 
-            let badgeTop = `<div class="ui blue label">SONDÉ • ${prof}m</div>`;
-            if (p.id === etat.parcelleActive) badgeTop = `<div class="ui green label">ACTIF • ${prof}m</div>`;
-            else if (st.estEnDecapage) badgeTop = `<div class="ui orange label">🚧 DÉCAPAGE • ${prof}m</div>`;
-
-            const infoTeneur = p.id === etat.parcelleActive
-                ? `${Math.round(p.reserveReelle)} t (${p.pureteReelle} g/t)`
-                : st.estEnDecapage
-                ? `Est: ~${p.estimationPurete} g/t`
-                : `Est: ~${p.estimationPurete} g/t | Dépl: ${CONFIG.coutDemenagement}€`;
-
-            let blocEtat = '';
-            if (st.estEnDecapage) {
-                const rest = Math.round(parseFloat(p.sterilesRestants) || 0);
-                const tot = Math.max(1, Math.round(parseFloat(p.sterilesTotal) || rest));
-                const pct = Math.min(100, Math.round(((tot - rest) / tot) * 100));
-                const heuresEst = st.debitDecapage > 0 ? `${Math.ceil(rest / st.debitDecapage)}h restantes` : 'Requis : 🚜 + ⛏️ + 🚛';
-                blocEtat = `
-                    <div style="color:#fb923c; font-weight:700; margin-top:2px;">🚧 Stériles : ${rest} / ${tot} t (${pct}%)</div>
-                    <div style="background:#292524; height:6px; border-radius:3px; margin:3px 0; overflow:hidden;">
-                        <div style="background:#f97316; width:${pct}%; height:100%;"></div>
-                    </div>
-                    <div style="color:${st.debitDecapage > 0 ? '#34d399' : '#f87171'};">${st.debitDecapage} t/h (${heuresEst})</div>
+            if (!estOuverte) {
+                div.innerHTML = `
+                    <div class="ui blue label">SONDÉ • ${prof}m</div>
+                    <h4 style="margin:4px 0; color:#f5f5f4;">${p.nom}</h4>
+                    <div style="font-size:0.88em;">Est: ~${p.estimationPurete} g/t</div>
+                    <div style="font-size:0.8em; color:#a8a29e; margin-top:4px;">Fosse fermée (décapage requis)</div>
+                    <button class="ui mini green button" style="margin-top:8px;" onclick="event.stopPropagation(); actionMine('parcelle', ${p.id})">⛏️ Ouvrir la fosse (${coutOuv.toLocaleString()} €)</button>
                 `;
             } else {
-                const badgeEquilibre = st.affectes.length === 0
-                    ? `<span style="color:#a8a29e;">Aucun engin</span>`
-                    : st.debitChaine === 0
-                    ? `<span style="color:#f87171;">⚠️ Chaîne incomplète</span>`
-                    : st.estEquilibre
-                    ? `<span style="color:#34d399;">⚖️ Rendement synchro</span>`
-                    : `<span style="color:#fbbf24;">⚠️ Débits déséquilibrés</span>`;
-                blocEtat = `
-                    <div style="color:#fbbf24; font-weight:700; margin-top:2px;">⚙️ Terre traitée : ${st.totalTerreTh} t/h</div>
-                    <div>${badgeEquilibre}</div>
+                const st = calculerStatsSecteur(i);
+                const detailMat = `🚜${st.counts.Decapage} | ⛏️${st.counts.Excavation} 🚛${st.counts.Transport} 🏗️${st.counts.Chargement} 📥${st.counts.Tremie} ➿${st.counts.Convoyeur} ⚙️${st.counts.Traitement} 💧${st.counts.Lavage}`;
+
+                let badgeTop = `<div class="ui green label">ACTIF • ${prof}m</div>`;
+                if (p.reserveReelle <= 0) badgeTop = `<div class="ui red label">ÉPUISÉ • ${prof}m</div>`;
+                else if (st.estEnDecapage) badgeTop = `<div class="ui orange label">🚧 DÉCAPAGE • ${prof}m</div>`;
+
+                const infoTeneur = `${Math.round(p.reserveReelle).toLocaleString()} t (${p.pureteReelle} g/t)`;
+
+                let blocEtat = '';
+                if (st.estEnDecapage) {
+                    const rest = Math.round(parseFloat(p.sterilesRestants) || 0);
+                    const tot = Math.max(1, Math.round(parseFloat(p.sterilesTotal) || rest));
+                    const pct = Math.min(100, Math.round(((tot - rest) / tot) * 100));
+                    const heuresEst = st.debitDecapage > 0 ? `${Math.ceil(rest / st.debitDecapage)}h restantes` : 'Requis : 🚜 + ⛏️ + 🚛';
+                    blocEtat = `
+                        <div style="color:#fb923c; font-weight:700; margin-top:2px;">🚧 Stériles : ${rest} / ${tot} t (${pct}%)</div>
+                        <div style="background:#292524; height:6px; border-radius:3px; margin:3px 0; overflow:hidden;">
+                            <div style="background:#f97316; width:${pct}%; height:100%;"></div>
+                        </div>
+                        <div style="color:${st.debitDecapage > 0 ? '#34d399' : '#f87171'};">${st.debitDecapage} t/h (${heuresEst})</div>
+                    `;
+                } else {
+                    const badgeEquilibre = st.affectes.length === 0
+                        ? `<span style="color:#a8a29e;">Aucun engin</span>`
+                        : st.debitChaine === 0
+                        ? `<span style="color:#f87171;">⚠️ Chaîne incomplète</span>`
+                        : st.estEquilibre
+                        ? `<span style="color:#34d399;">⚖️ Rendement synchro</span>`
+                        : `<span style="color:#fbbf24;">⚠️ Débits déséquilibrés</span>`;
+                    blocEtat = `
+                        <div style="color:#fbbf24; font-weight:700; margin-top:2px;">⚙️ Terre traitée : ${st.totalTerreTh} t/h</div>
+                        <div>${badgeEquilibre}</div>
+                    `;
+                }
+
+                const btnChantier = st.estEnDecapage
+                    ? `<button class="ui mini orange button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🚜 Décaper</button>`
+                    : `<button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
+
+                div.innerHTML = `
+                    ${badgeTop}
+                    <h4 style="margin:4px 0; color:${p.id === etat.parcelleActive ? '#fbbf24' : '#f5f5f4'};">${p.nom}</h4>
+                    <div style="font-size:0.88em;">${infoTeneur}</div>
+                    <div style="margin-top:6px; padding:5px; background:rgba(0,0,0,0.35); border-radius:4px; font-size:0.8em;">
+                        <div><strong>${detailMat}</strong></div>
+                        ${blocEtat}
+                    </div>
+                    ${btnChantier}
                 `;
             }
-
-            const btnChantier = st.estEnDecapage
-                ? `<button class="ui mini orange button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🚜 Décaper</button>`
-                : `<button class="ui mini yellow button" style="margin-top:6px;" onclick="event.stopPropagation(); ouvrirChantierSecteur(${i})">🏗️ Gérer le chantier</button>`;
-
-            div.innerHTML = `
-                ${badgeTop}
-                <h4 style="margin:4px 0; color:${p.id === etat.parcelleActive ? '#fbbf24' : '#f5f5f4'};">${p.nom}</h4>
-                <div style="font-size:0.88em;">${infoTeneur}</div>
-                <div style="margin-top:6px; padding:5px; background:rgba(0,0,0,0.35); border-radius:4px; font-size:0.8em;">
-                    <div><strong>${detailMat}</strong></div>
-                    ${blocEtat}
-                </div>
-                ${btnChantier}
-            `;
         } else {
             div.innerHTML = `
                 <div class="ui label">VIERGE • ${prof} m</div>
@@ -859,7 +873,7 @@ function rendreChantierSecteur(idx) {
     if (st.affectes.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur.</td></tr>';
     } else {
-        const optionsSecteurs = parcelles.map((sec, sIdx) => sec.estSondee ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
+        const optionsSecteurs = parcelles.map((sec, sIdx) => (sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === etat.parcelleActive)) ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
         tbody.innerHTML = st.affectes.map(e => {
             const vMin = parseFloat(e.vitesse_min_th) || 2;
             const vMax = parseFloat(e.vitesse_max_th) || 5;

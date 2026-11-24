@@ -43,6 +43,7 @@ function genererParcellesInitiales() {
         pureteReelle: i === 0 ? 5.0 : +(Math.random() * 7.5 + 2.5).toFixed(1),
         estSondee: i === 0,
         estDecapee: i === 0,
+        estOuverte: i === 0,
         sterilesTotal: 0,
         sterilesRestants: 0,
         estimationPurete: i === 0 ? 5.0 : null
