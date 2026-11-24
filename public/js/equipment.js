@@ -137,12 +137,45 @@ function rendreMaFlotte() {
     }
     if (eqFiltres.flotte.gab !== 'TOUS') maFlotteFiltree = maFlotteFiltree.filter(f => (f.gabarit || 'Moyen') === eqFiltres.flotte.gab);
 
+    const cfgObj = (typeof CONFIG !== 'undefined' && CONFIG) ? CONFIG : {};
+    const reqCondDefaut = parseInt(cfgObj.conducteursRequisParEngin, 10) || 2;
+    const estFixeEq = (cat) => {
+        const c = (cat || '').toLowerCase();
+        return c.includes('trém') || c.includes('trem') || c.includes('convoy') || c.includes('traitement') || c.includes('lavage');
+    };
+    const tousActifs = [
+        ...(Array.isArray(eqData.myFleet) ? eqData.myFleet.filter(x => x.statut === 'ACTIF').map(x => ({ ...x, _k: 'FLEET' })) : []),
+        ...(Array.isArray(eqData.myActiveRentals) ? eqData.myActiveRentals.map(x => ({ ...x, _k: 'RENTAL' })) : [])
+    ].sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 3) - (parseFloat(a.vitesse_reglee_th) || 3));
+
+    let condRestants = (typeof etat !== 'undefined' && etat.conducteurs !== undefined) ? (parseInt(etat.conducteurs, 10) || 0) : 0;
+    let mecaRestants = (typeof etat !== 'undefined' && etat.mecaniciens !== undefined) ? (parseInt(etat.mecaniciens, 10) || 0) : 0;
+    const equipageMap = new Map();
+
+    for (const item of tousActifs) {
+        if (parseInt(item.parcelle_index, 10) < 0) continue;
+        const key = `${item._k}:${item.id}`;
+        if (estFixeEq(item.categorie)) {
+            if (mecaRestants >= 1) {
+                mecaRestants -= 1;
+                equipageMap.set(key, { ok: true, msg: '' });
+            } else {
+                equipageMap.set(key, { ok: false, msg: '⚠️ Sans mécano (0/1)' });
+            }
+        } else {
+            const aff = Math.min(reqCondDefaut, condRestants);
+            condRestants -= aff;
+            if (aff <= 0) equipageMap.set(key, { ok: false, msg: `⚠️ Sans conducteur (0/${reqCondDefaut})` });
+            else if (aff < reqCondDefaut) equipageMap.set(key, { ok: false, msg: `⚠️ Équipage partiel (${aff}/${reqCondDefaut})` });
+            else equipageMap.set(key, { ok: true, msg: '' });
+        }
+    }
+
     if (maFlotteFiltree.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#a8a29e;">Aucun engin dans votre flotte pour ce filtre.</td></tr>';
     } else {
         tbody.innerHTML = maFlotteFiltree.map(f => {
             const usure = Math.round(parseFloat(f.usure_actuelle));
-
             const gab = f.gabarit || 'Moyen';
             const nbPieces = parseInt(f.pieces_panne) || 1;
             const isGrue = (f.categorie || '').toLowerCase().includes('levag');
@@ -162,8 +195,13 @@ function rendreMaFlotte() {
                     return ouverte ? `<option value="${sIdx}" ${sIdx === pIdx ? 'selected' : ''}>🗺️ ${sec.nom}</option>` : '';
                 }).join('');
 
+            const eqInfo = (f.statut === 'ACTIF' && pIdx >= 0) ? equipageMap.get(`FLEET:${f.id}`) : null;
+            const badgeEquipage = (eqInfo && !eqInfo.ok)
+                ? `<div style="margin-top:4px;"><span class="ui red label" style="font-size:0.75em;">${eqInfo.msg}</span></div>`
+                : '';
+
             const badgeStatut = f.statut === 'ACTIF'
-                ? `<select style="padding:5px 8px; border-radius:4px; background:#1c1917; color:${pIdx < 0 ? '#a8a29e' : '#34d399'}; border:1px solid #44403c; font-weight:700; cursor:pointer;" onchange="changerAffectationFlotte('FLEET', ${f.id}, this.value)">${optionsAffectation}</select>`
+                ? `<select style="padding:5px 8px; border-radius:4px; background:#1c1917; color:${pIdx < 0 ? '#a8a29e' : '#34d399'}; border:1px solid #44403c; font-weight:700; cursor:pointer;" onchange="changerAffectationFlotte('FLEET', ${f.id}, this.value)">${optionsAffectation}</select>${badgeEquipage}`
                 : f.statut === 'EN_PANNE'
                 ? `<span class="ui red label">🚨 EN PANNE (${nomSecteur})</span>`
                 : f.statut === 'EN_VENTE'
@@ -222,6 +260,10 @@ function rendreMaFlotte() {
 
             locTbody.innerHTML = mesLocationsFiltrees.map(r => {
                 const rIdx = isNaN(parseInt(r.parcelle_index)) ? 0 : parseInt(r.parcelle_index);
+                const eqLoc = rIdx >= 0 ? equipageMap.get(`RENTAL:${r.id}`) : null;
+                const badgeEqLoc = (eqLoc && !eqLoc.ok)
+                    ? `<span class="ui red label" style="font-size:0.75em;">${eqLoc.msg}</span>`
+                    : '';
                 const optsLoc = `<option value="-1" ${rIdx < 0 ? 'selected' : ''}>🅿️ Au dépôt</option>` +
                     listeParcelles.map((sec, sIdx) => {
                         const ouverte = sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === secActifId);
@@ -237,6 +279,7 @@ function rendreMaFlotte() {
                         <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">
                             <select style="padding:4px 6px; border-radius:4px; background:#1c1917; color:#34d399; border:1px solid #44403c; font-weight:700;" onchange="changerAffectationFlotte('RENTAL', ${r.id}, this.value)">${optsLoc}</select>
                             <span class="ui blue label">${r.jours_restants}j restants</span>
+                            ${badgeEqLoc}
                         </div>
                     </td>
                 </tr>
@@ -245,7 +288,7 @@ function rendreMaFlotte() {
         }
     }
 }
-
+         
 async function changerAffectationFlotte(targetType, targetId, parcelleIndex) {
     if (typeof affecterEnginSecteur === 'function') {
         await affecterEnginSecteur(targetType, targetId, parcelleIndex);

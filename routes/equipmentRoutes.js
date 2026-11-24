@@ -172,7 +172,7 @@ router.post('/buy-new', requireAuth, async (req, res) => {
 
         await client.query(
             `INSERT INTO player_fleet (owner_id, catalog_id, nom, categorie, gabarit, prod_tonnes, vitesse_min_th, vitesse_max_th, vitesse_reglee_th, carburant_jour, usure_jour, pieces_panne, usure_actuelle, parcelle_index, statut)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 0, 'ACTIF')`,
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, -1, 'ACTIF')`,
             [userId, item.id, item.nom, item.categorie, item.gabarit || 'Moyen', item.prod_tonnes, vMin, vMax, vDefaut, item.carburant_jour, item.usure_jour, item.pieces_panne || 1]
         );
 
@@ -292,7 +292,7 @@ router.post('/bid', requireAuth, async (req, res) => {
 
             await client.query('UPDATE mines SET argent = argent - $1, foreuses = foreuses + 1 WHERE user_id = $2', [prixActuel, userId]);
             await client.query('UPDATE mines SET argent = argent + $1, foreuses = GREATEST(0, foreuses - 1) WHERE user_id = $2', [netVendeur, auc.seller_id]);
-            await client.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = 0 WHERE id = $2`, [userId, auc.fleet_id]);
+            await client.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = -1 WHERE id = $2`, [userId, auc.fleet_id]);
             await client.query('DELETE FROM market_auctions WHERE id = $1', [auctionId]);
 
             await client.query('COMMIT');
@@ -461,7 +461,7 @@ router.post('/rent', requireAuth, async (req, res) => {
 
             await client.query(
                 `INSERT INTO active_rentals (source_type, catalog_id, renter_id, nom, categorie, prod_tonnes, vitesse_min_th, vitesse_max_th, vitesse_reglee_th, carburant_jour, usure_jour, loyer_jour, jours_restants, parcelle_index, statut)
-                 VALUES ('OFFICIEL', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 0, 'EN_COURS')`,
+                 VALUES ('OFFICIEL', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, -1, 'EN_COURS')`,
                 [item.id, userId, item.nom, item.categorie, item.prod_tonnes, vMin, vMax, vDefaut, item.carburant_jour, item.usure_jour, loyerJour, jours]
             );
 
@@ -488,7 +488,7 @@ router.post('/rent', requireAuth, async (req, res) => {
         }
 
 
-        await client.query(`UPDATE active_rentals SET renter_id = $1, statut = 'EN_COURS' WHERE id = $2`, [userId, rentalId]);
+        await client.query(`UPDATE active_rentals SET renter_id = $1, parcelle_index = -1, statut = 'EN_COURS' WHERE id = $2`, [userId, rentalId]);
         await client.query(`UPDATE player_fleet SET statut = 'LOUE' WHERE id = $1`, [offre.fleet_id]);
 
         await client.query('COMMIT');

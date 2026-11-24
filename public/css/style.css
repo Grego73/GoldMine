@@ -134,7 +134,9 @@ a:hover {
     padding: 24px;
     margin-bottom: 24px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+    overflow-x: auto;
 }
+
 .ui.inverted.segment {
     background: #1c1917;
     border: 1px solid #44403c;
@@ -280,12 +282,22 @@ a:hover {
     width: 100%;
     border-collapse: collapse;
     margin-top: 10px;
+    font-size: 0.92em;
 }
 .ui.table th,
 .ui.table td {
-    padding: 12px;
+    padding: 9px 7px;
     text-align: left;
     border-bottom: 1px solid #44403c;
+    vertical-align: middle;
+}
+.ui.table td:last-child {
+    white-space: normal;
+}
+.ui.table td:last-child .ui.mini.button {
+    padding: 5px 8px;
+    font-size: 0.78em;
+    margin: 2px 2px 2px 0;
 }
 .ui.table th {
     background: #1c1917;
@@ -295,6 +307,7 @@ a:hover {
 .ui.table tr:hover {
     background: rgba(255, 255, 255, 0.03);
 }
+
 
 /* --- GRILLE DE PROSPECTION --- */
 .pit-grid {

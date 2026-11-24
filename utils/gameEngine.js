@@ -237,7 +237,7 @@ async function resoudreEncheresExpirees(clientDb, cfg) {
                 const netVendeur = +(prixFinal * (1 - cfg.commissionBrocantePct)).toFixed(2);
 
                 await clientDb.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netVendeur, auc.seller_id]);
-                await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = 0 WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
+                await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = -1 WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
             } else {
                 await clientDb.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [auc.fleet_id]);
             }
