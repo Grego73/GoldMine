@@ -688,6 +688,14 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
     if (isNaN(pIdx) || pIdx < -1 || pIdx > 11) return res.status(400).json({ error: 'Secteur invalide.' });
 
     try {
+        const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
+        const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
+
+        if (pIdx === -1) {
+            await pool.query(`UPDATE ${table} SET parcelle_index = -1 WHERE id = $1 AND ${ownerCol} = $2`, [targetId, userId]);
+            return res.json({ success: true, message: `🅿️ Engin désaffecté et rapatrié au dépôt (à l'arrêt).` });
+        }
+
         const mineRes = await pool.query('SELECT parcelles, parcelle_active FROM mines WHERE user_id = $1', [userId]);
         const parcelles = mineRes.rows.at(0)?.parcelles || [];
         const parcelleActive = parseInt(mineRes.rows.at(0)?.parcelle_active) || 0;
@@ -701,12 +709,10 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
             return res.status(400).json({ error: `La fosse de ${pCible.nom} n'est pas encore ouverte ! Cliquez sur "Ouvrir la fosse" dans le cadastre pour démarrer le décapage.` });
         }
 
-        const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
-        const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
-
         await pool.query(`UPDATE ${table} SET parcelle_index = $1 WHERE id = $2 AND ${ownerCol} = $3`, [pIdx, targetId, userId]);
         res.json({ success: true, message: `🗺️ Engin affecté au chantier ${pCible.nom} !` });
-
+    
+    
     } catch (err) {
         console.error('Erreur /assign-sector :', err);
         res.status(500).json({ error: 'Erreur affectation secteur' });
@@ -714,3 +720,4 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
 });
 
 module.exports = router;
+
