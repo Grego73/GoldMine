@@ -391,7 +391,7 @@ function afficherTutoriel() {
         {
             titre: 'Première vente d’or',
             desc: 'Vendez votre stock d’or à un acheteur international dans Bourse & Clients.',
-            pret: true,
+            pret: false,
             onglet: 'marche'
         }
     ];

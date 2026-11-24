@@ -396,11 +396,13 @@ router.post('/sell-client', requireAuth, async (req, res) => {
             await clientDb.query('UPDATE market_clients SET demande_grammes = $1 WHERE id = $2', [newDemande, clientId]);
         }
 
-        const impact = (qte / 1000) * (cfg.impactOffreDemande || 0.02);
-        await clientDb.query(
-            `UPDATE market_state SET cours_or = GREATEST($1, ROUND((cours_or * (1 - $2))::numeric, 2)) WHERE id = 1`,
-            [cfg.coursOrMin || 35, impact]
-        );
+        const mktRes = await clientDb.query('SELECT cours_or FROM market_state WHERE id = 1 FOR UPDATE');
+        const coursActuel = parseFloat(mktRes.rows.at(0)?.cours_or) || 60;
+        const coursMin = parseFloat(cfg.coursOrMin) || 35;
+        const impact = (qte / 1000) * (parseFloat(cfg.impactOffreDemande) || 0.02);
+        const nouveauCours = Math.max(coursMin, +(coursActuel * (1 - impact)).toFixed(2));
+        await clientDb.query(`UPDATE market_state SET cours_or = $1 WHERE id = 1`, [nouveauCours]);
+
 
         const detailLog = `💰 Vente de ${qte}g à ${acheteur.nom} (${prixUnitaire} €/g, ${marge >= 0 ? '+' : ''}${Math.round(marge * 100)}%) -> +${Math.round(net).toLocaleString()} € net`;
         await clientDb.query(
@@ -413,7 +415,7 @@ router.post('/sell-client', requireAuth, async (req, res) => {
     } catch (err) {
         await clientDb.query('ROLLBACK');
         console.error('Erreur POST /sell-client :', err);
-        res.status(500).json({ error: 'Erreur lors de la transaction' });
+        res.status(500).json({ error: 'Erreur transaction : ' + err.message });
     } finally {
         clientDb.release();
     }
