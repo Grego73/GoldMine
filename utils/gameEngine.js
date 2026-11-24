@@ -115,11 +115,10 @@ async function resoudreCarnetOrdres4h(clientDb, cfg) {
 }
 
 async function calculerDynamiqueMarche4h(clientDb, coursActuel, coursCarburantActuel, cfg) {
-     heuresCycle = parseInt(cfg.cycleMarcheHeures, 10);
+    const heuresCycle = parseInt(cfg.cycleMarcheHeures, 10);
     if (!Number.isFinite(heuresCycle) || heuresCycle <= 0) {
         throw new Error('Variable BDD manquante ou invalide : cycleMarcheHeures');
     }
-    const heuresCycle = Math.max(1, parseInt(cfg.cycleMarcheHeures) || 4);
     const ventesRes = await clientDb.query(`
         SELECT details FROM player_logs
         WHERE category = 'FINANCE'
@@ -184,7 +183,11 @@ async function genererClientsMarche(clientDb, coursOr, cfg, multDemande = 1.0) {
     const resCat = await clientDb.query('SELECT * FROM clients_catalog WHERE actif = TRUE ORDER BY id ASC');
     if (resCat.rows.length === 0) return;
 
-    const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
+    const heuresCycle = parseInt(cfg.cycleMarcheHeures, 10);
+    if (!Number.isFinite(heuresCycle) || heuresCycle <= 0) {
+        throw new Error('Variable BDD manquante ou invalide : cycleMarcheHeures');
+    }
+
     const expiresAt = new Date(Date.now() + heuresCycle * 3600 * 1000);
 
     // Supprimer uniquement les clients qui auraient été retirés du catalogue Admin
@@ -264,7 +267,10 @@ async function synchroniserHorlogeServeur() {
         let historiqueCarburant = Array.isArray(mkt.historique_carburant) ? mkt.historique_carburant : [];
 
         // A. CYCLE MARCHÉ & PRIX CLIENTS DYNAMIQUES (TOUTES LES 4 HEURES)
-        const heuresCycle = Math.max(1, cfg.cycleMarcheHeures || 4);
+        const heuresCycle = parseInt(cfg.cycleMarcheHeures, 10);
+        if (!Number.isFinite(heuresCycle) || heuresCycle <= 0) {
+            throw new Error('Variable BDD manquante ou invalide : cycleMarcheHeures');
+        }
         const msCycle = heuresCycle * 3600 * 1000;
         const baseTickMarche = new Date(mkt.last_market_tick).getTime();
         const tempsEcouleMarche = Date.now() - baseTickMarche;
