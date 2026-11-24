@@ -821,11 +821,24 @@ function rendreChantierSecteur(idx) {
     }
 
     const st = calculerStatsSecteur(idx);
+    const etapesAutorisees = st.estEnDecapage
+        ? ['Decapage', 'Excavation', 'Transport']
+        : ['Excavation', 'Transport', 'Chargement', 'Tremie', 'Convoyeur', 'Traitement', 'Lavage'];
+
     const fleetAll = [
         ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []).map(f => ({ ...f, targetType: 'FLEET' })),
         ...(Array.isArray(etat.rentalsAll) ? etat.rentalsAll : []).map(r => ({ ...r, targetType: 'RENTAL' }))
     ];
-    const autres = fleetAll.filter(e => parseInt(e.parcelle_index) !== idx);
+    const autres = fleetAll
+        .filter(e => {
+            if (parseInt(e.parcelle_index) >= 0) return false;
+            if (etapeChantierFiltre !== 'TOUTES') {
+                return correspondEtapeEngin(e.categorie, etapeChantierFiltre);
+            }
+            return etapesAutorisees.some(et => correspondEtapeEngin(e.categorie, et));
+        })
+        .sort((a, b) => (parseFloat(b.vitesse_reglee_th) || 0) - (parseFloat(a.vitesse_reglee_th) || 0));
+
 
     panel.style.display = 'block';
     const gridEl = document.getElementById('sector-debits-grid');
