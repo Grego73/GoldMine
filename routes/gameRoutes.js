@@ -363,6 +363,16 @@ router.post('/sell-client', requireAuth, async (req, res) => {
             return res.status(400).json({ error: `Ce client ne demande que ${demande} g maximum.` });
         }
 
+        const dejaOffertRes = await clientDb.query(
+            `SELECT COALESCE(SUM(quantite_grammes), 0) AS total FROM market_sell_orders WHERE user_id = $1 AND client_id = $2 AND statut = 'EN_ATTENTE'`,
+            [userId, clientId]
+        );
+        const dejaOffert = parseFloat(dejaOffertRes.rows.at(0).total) || 0;
+        if ((dejaOffert + qte) > demande) {
+            await clientDb.query('ROLLBACK');
+            return res.status(400).json({ error: `Vous avez déjà ${dejaOffert} g en attente pour ce client (limite max : ${demande} g).` });
+        }
+
         const prixUnitaire = +(parseFloat(acheteur.prix_base_gramme) * (1 + marge)).toFixed(2);
         const newStock = +(stockOr - qte).toFixed(1);
 
@@ -437,31 +447,53 @@ router.post('/event-choice', requireAuth, async (req, res) => {
     const { choiceId } = req.body;
     const userId = req.session.userId;
 
+    const client = await pool.connect();
     try {
-        const mineRes = await pool.query('SELECT * FROM mines WHERE user_id = $1', [userId]);
-        const userRes = await pool.query('SELECT username FROM users WHERE id = $1', [userId]);
+        await client.query('BEGIN');
+        const mineRes = await client.query('SELECT * FROM mines WHERE user_id = $1 FOR UPDATE', [userId]);
+        const userRes = await client.query('SELECT username FROM users WHERE id = $1', [userId]);
         const mine = mineRes.rows.at(0);
         const ev = mine.pending_event;
 
-        if (!ev) return res.status(400).json({ error: 'Aucun événement en attente' });
+        if (!ev) {
+            await client.query('ROLLBACK');
+            return res.status(400).json({ error: 'Aucun événement en attente' });
+        }
         const choix = ev.choix.find(c => c.id === choiceId) || ev.choix.at(0);
 
         const argent = parseFloat(mine.argent) + (choix.effet.argent || 0);
         const moral = Math.max(0, Math.min(100, parseFloat(mine.moral) + (choix.effet.moral || 0)));
-        const usure = Math.max(0, Math.min(100, parseFloat(mine.usure) + (choix.effet.usure || 0)));
+        const deltaUsure = parseFloat(choix.effet.usure) || 0;
+        const usure = Math.max(0, Math.min(100, parseFloat(mine.usure) + deltaUsure));
         const stockOr = parseFloat(mine.stock_or) + (choix.effet.bonusOr || 0);
 
-        await pool.query(
+        if (deltaUsure !== 0) {
+            await client.query(
+                `UPDATE player_fleet SET usure_actuelle = GREATEST(0, LEAST(99, usure_actuelle + $1)) WHERE owner_id = $2 AND statut = 'ACTIF'`,
+                [deltaUsure, userId]
+            );
+        }
+
+        await client.query(
             `UPDATE mines SET argent = $1, moral = $2, usure = $3, stock_or = $4, pending_event = NULL WHERE user_id = $5`,
             [argent, moral, usure, stockOr, userId]
         );
 
-        await logJoueur(userId, userRes.rows.at(0).username, 'MINE', `Événement [${ev.titre}] -> ${choix.texte}`);
+        await client.query(
+            'INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, $3, $4)',
+            [userId, userRes.rows.at(0).username, 'MINE', `Événement [${ev.titre}] -> ${choix.texte}`]
+        );
+
+        await client.query('COMMIT');
         res.json({ success: true });
     } catch (err) {
+        await client.query('ROLLBACK');
         res.status(500).json({ error: 'Erreur résolution événement' });
+    } finally {
+        client.release();
     }
 });
+
 
 // 5. CLASSEMENT DES COMPAGNIES MINIÈRES
 router.get('/ranking', requireAuth, async (req, res) => {

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { pool } = require('../config/db');
 const { loadGameConfig } = require('../config/gameConfig');
-
+const LINKS = require('../config/links');
 async function requireAdmin(req, res, next) {
     const uid = req.session && (req.session.userId || (req.session.user && req.session.user.id));
     if (!uid) return res.status(401).json({ error: 'Non connecté' });
@@ -312,8 +312,8 @@ router.get('/version', requireAdmin, async (req, res) => {
         let githubMsg = '';
 
         try {
-            const ghRes = await fetch('https://github.com', {
-                headers: { 'User-Agent': 'GoldMine-Admin' }
+            const ghRes = await fetch(LINKS.githubCommitApiUrl, {
+                headers: { 'User-Agent': 'GoldMine-Admin', 'Accept': 'application/vnd.github.v3+json' }
             });
             if (ghRes.ok) {
                 const ghData = await ghRes.json();

@@ -75,7 +75,7 @@ router.get('/', requireAuth, async (req, res) => {
 
         // Annonces Brocante & Enchères en cours
         const auctionsRes = await pool.query(`
-            SELECT a.*, f.nom, f.categorie, f.prod_tonnes, f.carburant_jour, f.usure_jour, f.usure_actuelle,
+            SELECT a.*, f.nom, f.categorie, f.prod_tonnes, f.vitesse_min_th, f.vitesse_max_th, f.carburant_jour, f.usure_jour, f.usure_actuelle,
                    u.username AS seller_name, hb.username AS bidder_name
             FROM market_auctions a
             JOIN player_fleet f ON f.id = a.fleet_id
@@ -285,7 +285,7 @@ router.post('/bid', requireAuth, async (req, res) => {
 
             await client.query('UPDATE mines SET argent = argent - $1, foreuses = foreuses + 1 WHERE user_id = $2', [prixActuel, userId]);
             await client.query('UPDATE mines SET argent = argent + $1, foreuses = GREATEST(0, foreuses - 1) WHERE user_id = $2', [netVendeur, auc.seller_id]);
-            await client.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF' WHERE id = $2`, [userId, auc.fleet_id]);
+            await client.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = 0 WHERE id = $2`, [userId, auc.fleet_id]);
             await client.query('DELETE FROM market_auctions WHERE id = $1', [auctionId]);
 
             await client.query('COMMIT');
@@ -429,6 +429,9 @@ router.post('/rent', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Réglez d’abord votre facture hebdomadaire en attente avant de louer du matériel.' });
         }
 
+        const engRes = await client.query(`SELECT COALESCE(SUM(loyer_jour), 0) AS total_loyers FROM active_rentals WHERE renter_id = $1 AND statut = 'EN_COURS'`, [userId]);
+        const loyersEngages = parseFloat(engRes.rows.at(0).total_loyers) || 0;
+
         if (sourceType === 'OFFICIEL') {
             const jours = Math.max(1, Math.min(maxJours, parseInt(dureeJours) || 1));
             const catRes = await client.query('SELECT * FROM equipment_catalog WHERE id = $1 AND actif = TRUE', [catalogId]);
@@ -440,9 +443,9 @@ router.post('/rent', requireAuth, async (req, res) => {
             const coeff = parseFloat(cfg.coeffLoyerJeu) || 0.08;
             const loyerJour = Math.round(parseFloat(item.prix_neuf) * coeff);
 
-            if (argent < loyerJour) {
+            if (argent < (loyersEngages + loyerJour)) {
                 await client.query('ROLLBACK');
-                return res.status(400).json({ error: `Trésorerie insuffisante (minimum ${loyerJour.toLocaleString()} € requis pour garantir le 1er jour).` });
+                return res.status(400).json({ error: `Trésorerie insuffisante pour couvrir vos loyers quotidiens (${(loyersEngages + loyerJour).toLocaleString()} €/j requis).` });
             }
 
             const vMin = parseFloat(item.vitesse_min_th) || 30;
@@ -472,10 +475,11 @@ router.post('/rent', requireAuth, async (req, res) => {
             await client.query('ROLLBACK');
             return res.status(400).json({ error: 'Vous ne pouvez pas louer votre propre engin.' });
         }
-        if (argent < parseFloat(offre.loyer_jour)) {
+        if (argent < (loyersEngages + parseFloat(offre.loyer_jour))) {
             await client.query('ROLLBACK');
-            return res.status(400).json({ error: `Trésorerie insuffisante (minimum ${Math.round(offre.loyer_jour).toLocaleString()} € requis).` });
+            return res.status(400).json({ error: `Trésorerie insuffisante pour couvrir vos loyers quotidiens (${Math.round(loyersEngages + parseFloat(offre.loyer_jour)).toLocaleString()} €/j requis).` });
         }
+
 
         await client.query(`UPDATE active_rentals SET renter_id = $1, statut = 'EN_COURS' WHERE id = $2`, [userId, rentalId]);
         await client.query(`UPDATE player_fleet SET statut = 'LOUE' WHERE id = $1`, [offre.fleet_id]);

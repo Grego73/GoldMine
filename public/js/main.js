@@ -144,6 +144,7 @@ async function chargerEtatJeu() {
 }
 
 function majAffichage(logs = null) {
+    if (logs) etat.logs = logs;
     const pActive = parcelles.at(etat.parcelleActive) || parcelles.at(0);
     document.getElementById('stat-jour').innerText = etat.jour;
     document.getElementById('stat-argent').innerText = Math.round(etat.argent).toLocaleString() + ' €';
@@ -391,7 +392,7 @@ function afficherTutoriel() {
         {
             titre: 'Première offre de vente d’or',
             desc: 'Déposez une offre de vente à un acheteur international dans Bourse & Clients.',
-            pret: (Array.isArray(etat.pendingOrders) && etat.pendingOrders.length > 0) || (Array.isArray(logs) && logs.some(l => (l.details || '').includes('Vente de ') || (l.details || '').includes('Offre de vente déposée'))),
+            pret: (Array.isArray(etat.pendingOrders) && etat.pendingOrders.length > 0) || (Array.isArray(etat.logs) && etat.logs.some(l => (l.details || '').includes('Vente de ') || (l.details || '').includes('Offre de vente déposée'))),
             onglet: 'marche'
         }
 

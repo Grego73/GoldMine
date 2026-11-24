@@ -218,10 +218,11 @@ async function resoudreEncheresExpirees(clientDb, cfg) {
                 const netVendeur = +(prixFinal * (1 - cfg.commissionBrocantePct)).toFixed(2);
 
                 await clientDb.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netVendeur, auc.seller_id]);
-                await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF' WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
+                await clientDb.query(`UPDATE player_fleet SET owner_id = $1, statut = 'ACTIF', parcelle_index = 0 WHERE id = $2`, [auc.highest_bidder_id, auc.fleet_id]);
             } else {
                 await clientDb.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [auc.fleet_id]);
             }
+
         }
         await clientDb.query('DELETE FROM market_auctions WHERE id = $1', [auc.id]);
     }
@@ -351,8 +352,9 @@ async function synchroniserHorlogeServeur() {
 
                 let coutCarburantHoraire = 0;
                 let coutLoyersHoraire = 0;
-                let pannesCount = 0;
+                let pannesNoms = [];
                 let sommeUsure = 0;
+
 
                 for (const item of tousEngins) {
                     const catLower = (item.categorie || '').toLowerCase();
@@ -388,7 +390,8 @@ async function synchroniserHorlogeServeur() {
                         }
 
                         if (panne) {
-                            pannesCount += 1;
+                            const sNom = parcelles.at(parseInt(item.parcelle_index) || 0)?.nom || 'Secteur A';
+                            pannesNoms.push(`${item.nom} (${sNom})`);
                             await client.query(`UPDATE player_fleet SET usure_actuelle = 100, statut = 'EN_PANNE' WHERE id = $1`, [item.id]);
                             sommeUsure += 100;
                         } else {
@@ -525,14 +528,15 @@ async function synchroniserHorlogeServeur() {
                     [stockOr, moral, usureMoyenne, nbTotalPossedes, marketingPoints, JSON.stringify(parcelles), pendingEvent ? JSON.stringify(pendingEvent) : null, fraisSemaine, mine.user_id]
                 );
 
-                if (orProduitTotal > 0 || pannesCount > 0) {
+                if (orProduitTotal > 0 || pannesNoms.length > 0) {
                     let msgLog = `⏱️ Extraction horaire (+${heuresEcoulees}h) : +${orProduitTotal}g d'or (${Math.round(rocheExtraiteTotale)}t) | Frais cumulés semaine : ${Math.round(fraisSemaine).toLocaleString()} €`;
-                    if (pannesCount > 0) msgLog += ` | 🚨 ${pannesCount} ENGIN(S) EN PANNE !`;
+                    if (pannesNoms.length > 0) msgLog += ` | 🚨 PANNE : ${pannesNoms.join(', ')} !`;
                     await client.query(
                         `INSERT INTO player_logs (user_id, username, category, details) VALUES ($1, $2, 'MINE', $3)`,
                         [mine.user_id, mine.username, msgLog]
                     );
                 }
+
             }
 
             const nouveauTickHeure = new Date(baseTickHeure + heuresEcoulees * msHeure);
@@ -569,8 +573,11 @@ async function synchroniserHorlogeServeur() {
                 }
             }
 
-            await client.query(`UPDATE market_state SET last_weekly_tick = NOW() WHERE id = 1`);
+            const semainesPassees = Math.max(1, Math.floor(tempsEcouleSemaine / msSemaine));
+            const nouveauTickSemaine = new Date(baseTickSemaine + semainesPassees * msSemaine);
+            await client.query(`UPDATE market_state SET last_weekly_tick = $1 WHERE id = 1`, [nouveauTickSemaine]);
         }
+
         // D. BANQUES : ÉCHÉANCES QUOTIDIENNES & ÉPARGNES À TERME (1 FOIS PAR 24H)
         const msJourBanque = 24 * 3600 * 1000;
         const baseTickBanque = new Date(mkt.last_daily_tick || mkt.last_hourly_tick).getTime();

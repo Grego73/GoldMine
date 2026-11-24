@@ -67,7 +67,6 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 
 // Verrou de maintenance pour les routes de jeu uniquement (avec tentative de reprise auto)
-app.use('/api/bank', bankRoutes);
 app.use('/api', async (req, res, next) => {
     if (isMaintenance) {
         try {
@@ -89,6 +88,7 @@ app.use('/api', async (req, res, next) => {
 app.use('/api/game', gameRoutes);
 app.use('/api/equipment', equipmentRoutes);
 app.use('/api/hr', hrRoutes);
+app.use('/api/bank', bankRoutes);
 
 async function startServer() {
     try {

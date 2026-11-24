@@ -9,7 +9,10 @@ const LINKS = {
     tchatgcUrl: process.env.TCHATGC_URL || 'https://tchatgc-1.onrender.com',
 
     // Services externes (pour l'envoi d'e-mails Brevo à venir)
-    brevoApiUrl: 'https://api.brevo.com/v3/smtp/email'
+    brevoApiUrl: 'https://api.brevo.com/v3/smtp/email',
+
+    // API GitHub pour vérifier le dernier commit de la branche main
+    githubCommitApiUrl: 'https://github.com/Grego73/GoldMine'
 };
 
 module.exports = LINKS;
