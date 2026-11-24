@@ -357,6 +357,26 @@ async function synchroniserHorlogeServeur() {
 
 
                 for (const item of tousEngins) {
+                    const sIdxItem = parseInt(item.parcelle_index);
+                    if (sIdxItem < 0) {
+                        if (item._kind === 'FLEET') {
+                            sommeUsure += parseFloat(item.usure_actuelle) || 0;
+                        } else {
+                            coutLoyersHoraire += (parseFloat(item.loyer_jour) / 24) * heuresEcoulees;
+                            if (item.source_type === 'PDG' && item.owner_id) {
+                                const netProprio = +(((parseFloat(item.loyer_jour) / 24) * heuresEcoulees) * (1 - cfg.commissionLocationPdgPct)).toFixed(2);
+                                await client.query('UPDATE mines SET argent = argent + $1 WHERE user_id = $2', [netProprio, item.owner_id]);
+                            }
+                            if (new Date(item.created_at).getTime() + (parseInt(item.jours_restants) * 24 * 3600 * 1000) <= Date.now()) {
+                                if (item.source_type === 'PDG' && item.fleet_id) {
+                                    await client.query(`UPDATE player_fleet SET statut = 'ACTIF' WHERE id = $1`, [item.fleet_id]);
+                                }
+                                await client.query('DELETE FROM active_rentals WHERE id = $1', [item.id]);
+                            }
+                        }
+                        continue;
+                    }
+
                     const catLower = (item.categorie || '').toLowerCase();
                     const isFixe = estInstallationFixe(item.categorie);
 

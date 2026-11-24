@@ -300,6 +300,10 @@ function rendreDetailFrais() {
     let loyersJ = 0;
 
     for (const item of fleetAll) {
+        if (parseInt(item.parcelle_index) < 0) {
+            if (item._kind === 'RENTAL') loyersJ += (parseFloat(item.loyer_jour) || 0);
+            continue;
+        }
         let ratio = 0;
         if (estFixe(item.categorie)) {
             if (mecaDispo >= 1) { mecaDispo -= 1; ratio = 1; }
@@ -907,9 +911,10 @@ function rendreChantierSecteur(idx) {
     if (affectesFiltres.length === 0) {
         tbody.innerHTML = `<tr><td colspan="4" style="text-align:center;color:#a8a29e;">Aucun engin affecté à ce secteur${etapeChantierFiltre !== 'TOUTES' ? ' pour l’étape ' + etapeChantierFiltre : ''}.</td></tr>`;
     } else {
-        const optionsSecteurs = parcelles.map((sec, sIdx) => (sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === etat.parcelleActive)) ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
+        const optionsSecteurs = `<option value="-1">🅿️ Au dépôt (Désaffecter)</option>` + parcelles.map((sec, sIdx) => (sec.estSondee && (sec.estOuverte || sIdx === 0 || sIdx === etat.parcelleActive)) ? `<option value="${sIdx}" ${sIdx === idx ? 'selected' : ''}>${sec.nom}</option>` : '').join('');
         tbody.innerHTML = affectesFiltres.map(e => {
             const vMin = parseFloat(e.vitesse_min_th) || 2;
+
             const vMax = parseFloat(e.vitesse_max_th) || 5;
             const vReg = parseFloat(e.vitesse_reglee_th) || vMin;
             const pct = Math.round((vReg / vMax) * 100);
@@ -939,13 +944,16 @@ function rendreChantierSecteur(idx) {
     if (autres.length === 0) {
         availEl.innerHTML = '<span style="color:#a8a29e; font-size:0.9em;">Tous vos engins actifs sont déjà sur ce secteur.</span>';
     } else {
-        availEl.innerHTML = autres.map(e => `
-            <button class="ui mini blue button" onclick="affecterEnginSecteur('${e.targetType}', ${e.id}, ${idx})">
-                ➕ ${e.nom} (${e.categorie} - ${e.vitesse_reglee_th} t/h)
-            </button>
-        `).join('');
-    }
-}
+        availEl.innerHTML = autres.map(e => {
+            const pIdxE = parseInt(e.parcelle_index);
+            const lieu = pIdxE < 0 ? '🅿️ Au dépôt' : (parcelles.at(pIdxE)?.nom || 'Secteur A');
+            return `
+                <button class="ui mini blue button" onclick="affecterEnginSecteur('${e.targetType}', ${e.id}, ${idx})">
+                    ➕ ${e.nom} (${e.categorie} - ${e.vitesse_reglee_th} t/h) [${lieu}]
+                </button>
+            `;
+        }).join('');
+    }}
 
 async function reglerVitesseEngin(targetType, targetId, vitesseTh) {
     const res = await fetch('/api/equipment/set-speed', {

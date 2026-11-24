@@ -702,11 +702,11 @@ router.post('/assign-sector', requireAuth, async (req, res) => {
         }
 
         const table = targetType === 'RENTAL' ? 'active_rentals' : 'player_fleet';
-
         const ownerCol = targetType === 'RENTAL' ? 'renter_id' : 'owner_id';
 
         await pool.query(`UPDATE ${table} SET parcelle_index = $1 WHERE id = $2 AND ${ownerCol} = $3`, [pIdx, targetId, userId]);
         res.json({ success: true, message: `🗺️ Engin affecté au chantier ${pCible.nom} !` });
+
     } catch (err) {
         console.error('Erreur /assign-sector :', err);
         res.status(500).json({ error: 'Erreur affectation secteur' });
