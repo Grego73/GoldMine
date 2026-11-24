@@ -556,16 +556,44 @@ function dessinerCarte() {
                     ${btnChantier}
                 `;
             }
+        } else if (p.enCoursForage && p.forageFinAt) {
+            const finMs = Number(p.forageFinAt);
+            const restMs = Math.max(0, finMs - Date.now());
+            const totMs = Math.max(1, Number(p.forageTotalMs) || 3600000);
+            const pct = Math.min(100, Math.max(0, Math.round(((totMs - restMs) / totMs) * 100)));
+            const secRest = Math.ceil(restMs / 1000);
+            const hR = String(Math.floor(secRest / 3600)).padStart(2, '0');
+            const mR = String(Math.floor((secRest % 3600) / 60)).padStart(2, '0');
+            const sR = String(secRest % 60).padStart(2, '0');
+
+            div.innerHTML = `
+                <div class="ui orange label">🛢️ FORAGE • ${prof} m</div>
+                <h4 style="margin:4px 0; color:#fbbf24;">${p.nom}</h4>
+                <div style="font-size:0.82em; color:#fb923c; font-weight:700;">Carottage en cours (${pct}%)</div>
+                <div style="background:#292524; height:6px; border-radius:3px; margin:5px 0; overflow:hidden;">
+                    <div style="background:#f97316; width:${pct}%; height:100%;"></div>
+                </div>
+                <div id="forage-timer-${i}" data-fin="${finMs}" data-tot="${totMs}" style="font-size:0.82em; color:#34d399; font-weight:700;">⏳ Fin dans ${hR}h ${mR}m ${sR}s</div>
+            `;
         } else {
+            const vitForage = Math.max(0.5, parseFloat(CONFIG.vitesseForageMetresHeure) || 5);
+            const hasGeo = Array.isArray(etat.cadres) && etat.cadres.includes('GEOLOGUE');
+            let dureeH = Math.max(1, Math.ceil(prof / vitForage));
+            if (hasGeo) dureeH = Math.max(1, Math.ceil(dureeH * 0.7));
+
             div.innerHTML = `
                 <div class="ui label">VIERGE • ${prof} m</div>
                 <h4 style="margin:4px 0; color:#a8a29e;">${p.nom}</h4>
                 <div style="font-size:0.82em; color:#fbbf24; margin-bottom:2px;">🛢️ Requis : ${badgeForeuse}</div>
-                <small>Sonder : ${CONFIG.coutCarottage}€</small>
+                <small>Sonder : ${CONFIG.coutCarottage}€ (⏳ ~${dureeH}h)</small>
             `;
         }
 
         div.onclick = () => {
+            if (!p.estSondee && p.enCoursForage && p.forageFinAt && Date.now() < Number(p.forageFinAt)) {
+                afficherToast(`🛢️ Carottage déjà en cours sur ${p.nom} !`, false);
+                return;
+            }
             if (!p.estSondee) {
                 const fleetAll = [
                     ...(Array.isArray(etat.fleetAll) ? etat.fleetAll : []),
@@ -775,6 +803,21 @@ setInterval(() => {
         const elMkt = document.getElementById('countdown-marche');
         if (elMkt) elMkt.innerText = `Renouvellement dans ${mh}h${mm}`;
     }
+
+    document.querySelectorAll('[id^="forage-timer-"]').forEach(el => {
+        const finMs = Number(el.getAttribute('data-fin')) || 0;
+        const restMs = Math.max(0, finMs - Date.now());
+        if (restMs <= 0 && !window._reloadForageEnCours) {
+            window._reloadForageEnCours = true;
+            chargerEtatJeu().finally(() => { window._reloadForageEnCours = false; });
+            return;
+        }
+        const secRest = Math.ceil(restMs / 1000);
+        const hR = String(Math.floor(secRest / 3600)).padStart(2, '0');
+        const mR = String(Math.floor((secRest % 3600) / 60)).padStart(2, '0');
+        const sR = String(secRest % 60).padStart(2, '0');
+        el.innerText = `⏳ Fin dans ${hR}h ${mR}m ${sR}s`;
+    });
 }, 1000);
 
 let secteurInspecteIdx = 0;

@@ -86,11 +86,43 @@ router.get('/state', requireAuth, async (req, res) => {
         }
         orAujourdhui = +orAujourdhui.toFixed(2);
 
-        const parcellesNormalisees = (mine.parcelles || []).map((p, idx) => ({
-            ...p,
-            profondeurMetres: parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx),
-            estOuverte: p.estOuverte !== undefined ? p.estOuverte : (idx === 0 || idx === mine.parcelle_active)
-        }));
+         let forageTermineMaj = false;
+        const parcellesNormalisees = (mine.parcelles || []).map((p, idx) => {
+            const prof = parseInt(p.profondeurMetres) || calculerProfondeurSecteur(idx);
+            if (!p.estSondee && p.enCoursForage && p.forageFinAt && Date.now() >= Number(p.forageFinAt)) {
+                forageTermineMaj = true;
+                const erreur = (Math.random() * 0.4) - 0.2;
+                const estPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
+                return {
+                    ...p,
+                    profondeurMetres: prof,
+                    estSondee: true,
+                    enCoursForage: false,
+                    forageFinAt: null,
+                    forageTotalMs: null,
+                    estOuverte: false,
+                    estDecapee: false,
+                    estimationPurete: estPurete
+                };
+            }
+            return {
+                ...p,
+                profondeurMetres: prof,
+                estOuverte: p.estOuverte !== undefined ? p.estOuverte : (idx === 0 || idx === mine.parcelle_active)
+            };
+        });
+
+        if (forageTermineMaj) {
+            await pool.query('UPDATE mines SET parcelles = $1 WHERE user_id = $2', [JSON.stringify(parcellesNormalisees), req.session.userId]);
+            const uName = userRes.rows.at(0)?.username || 'PDG';
+            for (let i = 0; i < parcellesNormalisees.length; i++) {
+                const av = (mine.parcelles || []).at(i);
+                const ap = parcellesNormalisees.at(i);
+                if (av && av.enCoursForage && ap.estSondee) {
+                    await logJoueur(req.session.userId, uName, 'MINE', `🛢️ Carottage terminé sur ${ap.nom} (${ap.profondeurMetres} m) : teneur estimée ~${ap.estimationPurete} g/t !`);
+                }
+            }
+        }
 
         const ordersRes = await pool.query(
             `SELECT * FROM market_sell_orders WHERE user_id = $1 AND statut = 'EN_ATTENTE' ORDER BY id ASC`,
@@ -253,21 +285,36 @@ router.post('/action', requireAuth, async (req, res) => {
                     });
                 }
 
+                if (p.enCoursForage && p.forageFinAt && Date.now() < Number(p.forageFinAt)) {
+                    const minsRest = Math.max(1, Math.ceil((Number(p.forageFinAt) - Date.now()) / 60000));
+                    const hR = Math.floor(minsRest / 60);
+                    const mR = minsRest % 60;
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ error: `Forage déjà en cours sur ${p.nom} (fin dans ${hR}h${String(mR).padStart(2, '0')}).` });
+                }
+
                 const hasGeologue = Array.isArray(mine.cadres) && mine.cadres.includes('GEOLOGUE');
                 const coutCarottageReel = hasGeologue ? Math.round(cfg.coutCarottage * 0.7) : cfg.coutCarottage;
                 if (argent < coutCarottageReel) {
                     await client.query('ROLLBACK');
                     return res.status(400).json({ error: 'Trésorerie insuffisante' });
                 }
+
+                const vitesseForage = Math.max(0.5, parseFloat(cfg.vitesseForageMetresHeure) || 5);
+                let dureeHeures = Math.max(1, Math.ceil(profondeur / vitesseForage));
+                if (hasGeologue) dureeHeures = Math.max(1, Math.ceil(dureeHeures * 0.7));
+                const dureeMs = dureeHeures * 3600 * 1000;
+
                 argent -= coutCarottageReel;
                 p.profondeurMetres = profondeur;
-                p.estSondee = true;
+                p.estSondee = false;
+                p.enCoursForage = true;
+                p.forageTotalMs = dureeMs;
+                p.forageFinAt = Date.now() + dureeMs;
                 p.estOuverte = false;
                 p.estDecapee = false;
 
-                const erreur = (Math.random() * 0.4) - 0.2;
-                p.estimationPurete = Math.max(1, +(p.pureteReelle * (1 + erreur)).toFixed(1));
-                message = `Carottage ${p.nom} (${profondeur} m) : teneur estimée ~${p.estimationPurete} g/t (-${coutCarottageReel} €). Vous pouvez maintenant ouvrir la fosse pour lancer le décapage.`;
+                message = `🛢️ Forage lancé sur ${p.nom} (${profondeur} m) : durée estimée ${dureeHeures}h (-${coutCarottageReel} €).`;
             } else if (!p.estOuverte && id !== 0 && id !== parcelleActive) {
                 const maxActives = parseInt(cfg.maxConcessionsActives) || 5;
                 const nbOuvertes = parcelles.filter((sec, sIdx) =>
